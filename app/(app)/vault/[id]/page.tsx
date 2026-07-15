@@ -1,14 +1,16 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useVaults } from '@/lib/vault-store'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { KebabMenu } from '@/components/ui/kebab-menu'
-import { ArrowLeft, Plus, Search, FileText, ChevronRight } from 'lucide-react'
-import { PixelDocIcon } from '@/components/pixel-icons'
+import { ArrowLeft, Plus, Search, ChevronRight } from 'lucide-react'
+import { PixelDocIcon, PixelFolderIcon, PixelMasterNoteIcon } from '@/components/pixel-icons'
 import { PixelProgress } from '@/components/pixel-progress'
+import { EmptyArchive } from '@/components/empty-archive'
+import { useMascot } from '@/components/mascot/mascot-context'
 
 export default function VaultDetailPage() {
   const params = useParams<{ id: string }>()
@@ -21,6 +23,21 @@ export default function VaultDetailPage() {
   const [noteTitle, setNoteTitle] = useState('')
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const { setOverride } = useMascot()
+
+  const isNotesEmpty = notes.length === 0
+
+  useEffect(() => {
+    if (deleteOpen) {
+      setOverride({ category: 'delete', state: 'deleting' })
+    } else if (isNotesEmpty) {
+      setOverride({ category: 'empty' })
+    } else {
+      setOverride(null)
+    }
+    return () => setOverride(null)
+  }, [deleteOpen, isNotesEmpty, setOverride])
 
   const notes = useMemo(() => {
     if (!vault) return []
@@ -31,9 +48,9 @@ export default function VaultDetailPage() {
 
   if (!vault) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <p className="text-sm text-muted-foreground">This vault could not be found.</p>
-        <Button className="mt-4 rounded-lg" variant="secondary" onClick={() => router.push('/dashboard')}>
+      <div className="page-shell text-center">
+        <p className="text-sm text-muted-foreground">This vault is not in the archive.</p>
+        <Button className="mt-4" variant="secondary" onClick={() => router.push('/dashboard')}>
           Back to Vaults
         </Button>
       </div>
@@ -58,71 +75,73 @@ export default function VaultDetailPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-8">
+    <div className="page-shell">
       <button
+        type="button"
         onClick={() => router.push('/dashboard')}
-        className="mb-5 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground touch-highlight-active p-1 rounded"
+        className="mb-4 inline-flex min-h-10 items-center gap-1.5 text-xs font-sans text-muted-foreground transition-colors duration-200 hover:text-foreground touch-highlight-active"
       >
-        <ArrowLeft className="size-4" />
+        <ArrowLeft className="size-3.5" />
         Vaults
       </button>
 
-      <header className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-bold tracking-tight text-foreground truncate">
-            {vault.name}
-          </h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {vault.masterNotes.length} Master Notes
+      <header className="page-header flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2.5">
+            <PixelFolderIcon className="size-5 shrink-0 text-accent/60" />
+            <h1 className="text-xl font-bold tracking-tight text-foreground truncate">{vault.name}</h1>
+          </div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {vault.masterNotes.length} master notes in this vault.
           </p>
         </div>
         <KebabMenu
           items={[
             {
-              label: 'Rename Vault',
+              label: 'Rename',
               onSelect: () => {
                 setRenameValue(vault.name)
                 setRenameOpen(true)
               },
             },
             {
-              label: 'Delete Vault',
+              label: 'Remove',
               destructive: true,
-              onSelect: () => {
-                deleteVault(vault.id)
-                router.push('/dashboard')
-              },
+              onSelect: () => setDeleteOpen(true),
             },
           ]}
         />
       </header>
 
-      {/* Search Input */}
-      <div className="mt-6 relative">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/60" />
+      <div className="relative mt-6">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/50" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search master notes..."
-          className="h-11 w-full rounded-lg border border-input bg-card pl-10 pr-4 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/45 focus:border-ring focus:ring-1 focus:ring-ring"
+          placeholder="Filter master notes..."
+          className="field-input pl-10"
         />
       </div>
 
       <section className="mt-8">
         {notes.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-card/20 p-10 text-center">
-            <PixelDocIcon className="mx-auto mb-3 text-muted-foreground/35 size-11" />
-            <p className="text-sm text-muted-foreground">
-              No master notes yet. Create one to begin.
-            </p>
-            
-            <button
-              onClick={() => setCreateOpen(true)}
-              className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-accent hover:underline"
-            >
-              <Plus className="size-4" />
-              Create Master Note
-            </button>
+          <div className="flex flex-col gap-8">
+            <EmptyArchive
+              icons={
+                <>
+                  <PixelDocIcon className="size-9" />
+                  <PixelMasterNoteIcon className="size-9 text-accent/50" />
+                </>
+              }
+              title="No master notes yet"
+              description="Compile scattered sources into one structured note."
+              action={
+                <Button onClick={() => setCreateOpen(true)} size="sm" variant="outline">
+                  <Plus className="size-3.5" />
+                  New Master Note
+                </Button>
+              }
+            />
           </div>
         ) : (
           <div className="flex flex-col">
@@ -131,63 +150,55 @@ export default function VaultDetailPage() {
                 {i > 0 && <hr className="pixel-divider" />}
                 <div
                   onClick={() => router.push(`/master/${note.id}`)}
-                  className="flex items-center justify-between py-4 cursor-pointer touch-highlight-active group rounded-lg"
+                  className="list-row touch-highlight-active group"
                 >
-                  <div className="min-w-0 flex-1 pr-4">
-                    <h3 className="text-[15px] font-medium text-foreground group-hover:text-accent transition-colors truncate">
+                  <div className="min-w-0 flex-1 pr-3">
+                    <h3 className="text-[15px] font-medium text-foreground group-hover:text-accent transition-colors duration-200 truncate">
                       {note.title}
                     </h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {note.sources.length} sources • {note.generated ? 'Generated' : 'Draft'}
+                    <p className="mt-1 font-brand text-[10px] text-muted-foreground tracking-wide">
+                      {note.sources.length} sources · {note.generated ? 'compiled' : 'draft'}
                     </p>
-                    <div className="mt-2 flex items-center gap-2.5">
+                    <div className="mt-2 flex items-center gap-2">
                       <PixelProgress value={note.coverage} maxBlocks={8} />
-                      <span className="text-[10px] font-semibold text-accent/80 tracking-wide uppercase">
-                        {note.coverage}% coverage
+                      <span className="font-brand text-[10px] text-accent/70 uppercase">
+                        {note.coverage}%
                       </span>
                     </div>
                   </div>
-                  <ChevronRight className="size-[18px] text-muted-foreground/60 group-hover:text-foreground transition-colors shrink-0" />
+                  <ChevronRight className="size-[18px] text-muted-foreground/50 group-hover:text-foreground transition-colors duration-200 shrink-0" />
                 </div>
               </div>
             ))}
 
-            <hr className="pixel-divider" />
+            <hr className="pixel-divider mt-2" />
 
-            {/* Inline Action Trigger */}
             <button
+              type="button"
               onClick={() => setCreateOpen(true)}
-              className="flex w-full items-center py-4 text-sm font-semibold text-accent/80 hover:text-accent active:opacity-90 justify-center border border-dashed border-border/60 rounded-lg transition-colors mt-4 touch-highlight-active"
+              className="mt-3 flex w-full min-h-12 items-center justify-center gap-1.5 text-sm font-semibold text-accent/80 hover:text-accent touch-highlight-active transition-colors duration-200"
             >
-              <Plus className="size-4 mr-1.5" />
-              Create Master Note
+              <Plus className="size-4" />
+              New Master Note
             </button>
           </div>
         )}
       </section>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Master Note">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Master Note">
         <form onSubmit={submitCreate} className="flex flex-col gap-4">
           <input
             autoFocus
             value={noteTitle}
             onChange={(e) => setNoteTitle(e.target.value)}
-            placeholder="Master note title"
-            className="h-11 rounded-lg border border-input bg-secondary px-3.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+            placeholder="Topic or chapter"
+            className="field-input"
           />
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-10 rounded-lg"
-              onClick={() => setCreateOpen(false)}
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="h-10 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90"
-            >
+            <Button type="submit" size="sm">
               Create
             </Button>
           </div>
@@ -200,25 +211,42 @@ export default function VaultDetailPage() {
             autoFocus
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
-            className="h-11 rounded-lg border border-input bg-secondary px-3.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+            className="field-input"
           />
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-10 rounded-lg"
-              onClick={() => setRenameOpen(false)}
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={() => setRenameOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="h-10 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90"
-            >
+            <Button type="submit" size="sm">
               Save
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Remove Vault">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-foreground leading-relaxed">
+            Remove <strong className="text-accent">{vault.name}</strong> and everything inside it?
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setDeleteOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                deleteVault(vault.id)
+                setDeleteOpen(false)
+                router.push('/dashboard')
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

@@ -25,13 +25,16 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center px-5"
+      className="fixed inset-0 z-[80] flex items-end justify-center px-4 pb-24 sm:items-center sm:pb-0 animate-slide-fade"
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
-      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl">
+      <div
+        className="absolute inset-0 bg-black/70 transition-opacity duration-200"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-sm rounded-[3px] border border-border bg-card p-5">
         <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
         <div className="mt-4">{children}</div>
       </div>

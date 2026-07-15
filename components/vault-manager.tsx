@@ -1,13 +1,15 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useVaults, type Vault } from '@/lib/vault-store'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { KebabMenu } from '@/components/ui/kebab-menu'
-import { Search, Plus, FileText } from 'lucide-react'
-import { PixelFolderIcon } from '@/components/pixel-icons'
+import { Search, Plus } from 'lucide-react'
+import { PixelFolderIcon, PixelArchiveIcon } from '@/components/pixel-icons'
+import { EmptyArchive } from '@/components/empty-archive'
+import { useMascot } from '@/components/mascot/mascot-context'
 
 function sourceCount(vault: Vault) {
   return vault.masterNotes.reduce((sum, n) => sum + n.sources.length, 0)
@@ -24,6 +26,7 @@ function formatDate(iso: string) {
 export function VaultManager() {
   const router = useRouter()
   const { vaults, createVault, renameVault, deleteVault } = useVaults()
+  const { setOverride } = useMascot()
   const [query, setQuery] = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
@@ -31,11 +34,26 @@ export function VaultManager() {
 
   const [renameTarget, setRenameTarget] = useState<Vault | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<Vault | null>(null)
 
   const filtered = useMemo(
     () => vaults.filter((v) => v.name.toLowerCase().includes(query.trim().toLowerCase())),
     [vaults, query],
   )
+
+  const isVaultsEmpty = filtered.length === 0
+  const isDeleting = !!deleteTarget
+
+  useEffect(() => {
+    if (isDeleting) {
+      setOverride({ category: 'delete', state: 'deleting' })
+    } else if (isVaultsEmpty) {
+      setOverride({ category: 'empty' })
+    } else {
+      setOverride(null)
+    }
+    return () => setOverride(null)
+  }, [isDeleting, isVaultsEmpty, setOverride])
 
   function submitCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -56,42 +74,50 @@ export function VaultManager() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-8">
-      <header className="flex flex-col gap-5">
-        <div className="flex flex-col gap-0.5">
-          <span className="font-serif text-2xl font-bold tracking-tight text-foreground">
-            PDF-Crab
-          </span>
-          <p className="text-xs text-muted-foreground tracking-wide uppercase font-semibold">
-            Knowledge Workspace
-          </p>
+    <div className="page-shell">
+      <header className="flex flex-col gap-4">
+        <span className="font-brand text-xl font-semibold tracking-tight text-foreground">
+          PDF-Crab
+        </span>
+        <div className="page-header flex flex-col gap-0.5">
+          <h1 className="text-xl font-bold tracking-tight text-foreground">Vaults</h1>
+          <p className="text-sm text-muted-foreground">Subjects, courses, and collections.</p>
         </div>
 
-        {/* Search Viewport */}
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/60" />
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-muted-foreground/50" />
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search vaults..."
-            className="h-11 w-full rounded-lg border border-input bg-card pl-10 pr-4 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/45 focus:border-ring focus:ring-1 focus:ring-ring"
+            placeholder="Filter vaults..."
+            className="field-input pl-10"
           />
         </div>
       </header>
 
       <section className="mt-8">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            My Vaults ({filtered.length})
-          </h2>
-        </div>
+        <h2 className="mb-1 text-xs font-sans font-medium uppercase tracking-wider text-muted-foreground">
+          Archive · {filtered.length}
+        </h2>
 
         {filtered.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-card/20 p-10 text-center">
-            <PixelFolderIcon className="mx-auto mb-3 text-muted-foreground/35 size-11" />
-            <p className="text-sm text-muted-foreground">
-              No vaults found. Create one to begin.
-            </p>
+          <div className="flex flex-col gap-8 mt-4">
+            <EmptyArchive
+              icons={
+                <>
+                  <PixelFolderIcon className="size-9" />
+                  <PixelArchiveIcon className="size-9 text-accent/50" />
+                </>
+              }
+              title="No vaults yet"
+              description="Create a vault for each subject you study."
+              action={
+                <Button onClick={() => setCreateOpen(true)} size="sm" variant="outline">
+                  <Plus className="size-3.5" />
+                  New Vault
+                </Button>
+              }
+            />
           </div>
         ) : (
           <div className="flex flex-col">
@@ -100,22 +126,18 @@ export function VaultManager() {
                 {i > 0 && <hr className="pixel-divider" />}
                 <div
                   onClick={() => router.push(`/vault/${vault.id}`)}
-                  className="flex items-center justify-between py-4 cursor-pointer touch-highlight-active group rounded-lg"
+                  className="list-row touch-highlight-active group"
                 >
                   <div className="min-w-0 flex-1 pr-4">
-                    <h3 className="text-[15px] font-medium text-foreground group-hover:text-accent transition-colors truncate">
-                      {vault.name}
-                    </h3>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
-                      <span className="inline-flex items-center gap-1">
-                        <FileText className="size-3" />
-                        {vault.masterNotes.length} notes
-                      </span>
-                      <span>•</span>
-                      <span>{sourceCount(vault)} sources</span>
-                      <span>•</span>
-                      <span className="truncate">Upd. {formatDate(vault.updatedAt)}</span>
+                    <div className="flex items-center gap-2.5">
+                      <PixelFolderIcon className="size-4 shrink-0 text-accent/60" />
+                      <h3 className="text-[15px] font-medium text-foreground group-hover:text-accent transition-colors duration-200 truncate">
+                        {vault.name}
+                      </h3>
                     </div>
+                    <p className="mt-1 font-brand text-[10px] text-muted-foreground tracking-wide">
+                      {vault.masterNotes.length} notes · {sourceCount(vault)} sources · {formatDate(vault.updatedAt)}
+                    </p>
                   </div>
                   <KebabMenu
                     items={[
@@ -127,52 +149,44 @@ export function VaultManager() {
                         },
                       },
                       {
-                        label: 'Delete',
+                        label: 'Remove',
                         destructive: true,
-                        onSelect: () => deleteVault(vault.id),
+                        onSelect: () => setDeleteTarget(vault),
                       },
                     ]}
                   />
                 </div>
               </div>
             ))}
-            
-            <hr className="pixel-divider" />
-            
-            {/* Inline Action Trigger */}
+
+            <hr className="pixel-divider mt-2" />
+
             <button
+              type="button"
               onClick={() => setCreateOpen(true)}
-              className="flex w-full items-center py-4 text-sm font-semibold text-accent/80 hover:text-accent active:opacity-90 justify-center border border-dashed border-border/60 rounded-lg transition-colors mt-4 touch-highlight-active"
+              className="mt-3 flex w-full min-h-12 items-center justify-center gap-1.5 text-sm font-semibold text-accent/80 hover:text-accent touch-highlight-active transition-colors duration-200"
             >
-              <Plus className="size-4 mr-1.5" />
-              Create Vault
+              <Plus className="size-4" />
+              New Vault
             </button>
           </div>
         )}
       </section>
 
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create Vault">
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="New Vault">
         <form onSubmit={submitCreate} className="flex flex-col gap-4">
           <input
             autoFocus
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Vault name"
-            className="h-11 rounded-lg border border-input bg-secondary px-3.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+            placeholder="e.g. Operating Systems"
+            className="field-input"
           />
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-10 rounded-lg"
-              onClick={() => setCreateOpen(false)}
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="h-10 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90"
-            >
+            <Button type="submit" size="sm">
               Create
             </Button>
           </div>
@@ -185,25 +199,43 @@ export function VaultManager() {
             autoFocus
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
-            className="h-11 rounded-lg border border-input bg-secondary px-3.5 text-sm text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+            className="field-input"
           />
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-10 rounded-lg"
-              onClick={() => setRenameTarget(null)}
-            >
+            <Button type="button" variant="ghost" size="sm" onClick={() => setRenameTarget(null)}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              className="h-10 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90"
-            >
+            <Button type="submit" size="sm">
               Save
             </Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Remove Vault">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-foreground leading-relaxed">
+            Remove <strong className="text-accent">{deleteTarget?.name}</strong> and everything inside it?
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (deleteTarget) {
+                  deleteVault(deleteTarget.id)
+                  setDeleteTarget(null)
+                }
+              }}
+            >
+              Remove
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

@@ -23,83 +23,79 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="mx-auto max-w-md px-4 py-8">
+    <div className="page-shell">
       <header className="flex flex-col gap-0.5">
         <h1 className="text-xl font-bold tracking-tight text-foreground">Profile</h1>
-        <p className="text-xs text-muted-foreground">Manage your account details.</p>
+        <p className="text-sm text-muted-foreground">Your account in the archive.</p>
       </header>
 
-      {/* Account Badge Header */}
-      <div className="mt-6 flex items-center gap-4 py-2">
-        <span className="flex size-14 items-center justify-center rounded-full border border-border bg-secondary text-base font-semibold text-foreground">
-          {name.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase()}
+      <div className="mt-6 flex items-center gap-4 py-1">
+        <span className="flex size-14 items-center justify-center rounded-[3px] bg-secondary text-base font-sans font-semibold text-foreground">
+          {name
+            .split(' ')
+            .map((p) => p[0])
+            .join('')
+            .slice(0, 2)
+            .toUpperCase()}
         </span>
         <div>
           <p className="text-[15px] font-semibold text-foreground">{name}</p>
-          <p className="text-xs text-muted-foreground">{email}</p>
+          <p className="text-sm text-muted-foreground">{email}</p>
         </div>
       </div>
 
-      {/* Stats Counter Row */}
-      <div className="mt-6 grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-border bg-card p-3 text-center">
-          <p className="text-xl font-bold text-foreground">{vaults.length}</p>
-          <p className="mt-0.5 text-[10px] uppercase font-semibold text-muted-foreground">Vaults</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3 text-center">
-          <p className="text-xl font-bold text-foreground">{totalNotes}</p>
-          <p className="mt-0.5 text-[10px] uppercase font-semibold text-muted-foreground">Notes</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-3 text-center">
-          <p className="text-xl font-bold text-foreground">{totalSources}</p>
-          <p className="mt-0.5 text-[10px] uppercase font-semibold text-muted-foreground">Sources</p>
-        </div>
+      <div className="mt-6 grid grid-cols-3 gap-3">
+        {[
+          { value: vaults.length, label: 'Vaults' },
+          { value: totalNotes, label: 'Notes' },
+          { value: totalSources, label: 'Sources' },
+        ].map((stat) => (
+          <div key={stat.label} className="py-3 text-center">
+            <p className="text-xl font-bold text-foreground">{stat.value}</p>
+            <p className="mt-0.5 text-[10px] font-brand uppercase text-muted-foreground">
+              {stat.label}
+            </p>
+          </div>
+        ))}
       </div>
 
       <hr className="pixel-divider mt-6" />
 
-      {/* Form Settings */}
       <form onSubmit={handleSave} className="mt-6">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Full name
+            <label htmlFor="name" className="text-xs font-medium text-muted-foreground">
+              Name
             </label>
             <input
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="h-11 rounded-lg border border-input bg-secondary px-3.5 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+              className="field-input"
             />
           </div>
-          
+
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Email Address
+            <label htmlFor="email" className="text-xs font-medium text-muted-foreground">
+              Email
             </label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="h-11 rounded-lg border border-input bg-secondary px-3.5 text-sm text-foreground outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
+              className="field-input"
             />
           </div>
 
-          <div className="flex items-center justify-between gap-3 mt-2">
-            <div className="w-16">
+          <div className="flex items-center justify-between gap-3 mt-1">
+            <div className="min-w-[5rem]">
               {saved && (
-                <span className="text-xs font-semibold text-accent animate-pulse">
-                  Saved
-                </span>
+                <span className="text-xs font-medium text-accent">Archive updated</span>
               )}
             </div>
-            <Button
-              type="submit"
-              size="lg"
-              className="h-11 px-6 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90 font-semibold"
-            >
-              Save changes
+            <Button type="submit" size="lg">
+              Save
             </Button>
           </div>
         </div>

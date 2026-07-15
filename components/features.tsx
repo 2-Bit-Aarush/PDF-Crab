@@ -1,56 +1,63 @@
 import { Reveal } from '@/components/reveal'
-import { ScanText, Network, FileStack, Link2 } from 'lucide-react'
+import {
+  PixelPdfIcon,
+  PixelMasterNoteIcon,
+  PixelFolderIcon,
+  PixelArchiveIcon,
+} from '@/components/pixel-icons'
 
 const features = [
   {
-    icon: ScanText,
-    title: 'Smart OCR',
+    icon: PixelPdfIcon,
+    title: 'Source intake',
     description:
-      'Reads printed and handwritten notes with high accuracy, capturing diagrams, formulas and layout — not just plain text.',
+      'PDFs and handwritten scans enter the archive. Layout, formulas, and diagrams stay attached to the text.',
   },
   {
-    icon: Network,
-    title: 'Knowledge Mapping',
+    icon: PixelMasterNoteIcon,
+    title: 'Topic alignment',
     description:
-      'Automatically organizes fragments into a structured knowledge map so related concepts sit together.',
+      'Fragments are sorted by topic. Related concepts sit together without rewriting your words.',
   },
   {
-    icon: FileStack,
-    title: 'Master Note Generation',
+    icon: PixelFolderIcon,
+    title: 'Master note compile',
     description:
-      'Merges every source into one complete, non-repetitive note while preserving your original wording.',
+      'Every unique passage merges into one note. Duplicates drop out. Original phrasing remains.',
   },
   {
-    icon: Link2,
-    title: 'Source References',
+    icon: PixelArchiveIcon,
+    title: 'Source traceability',
     description:
-      'Every line traces back to its source document and page, so nothing is ever lost or unverifiable.',
+      'Each line links back to its document and page. Nothing drifts from where it came from.',
   },
 ]
 
 export function Features() {
   return (
-    <section id="features" className="mx-auto max-w-6xl px-5 py-24">
-      <Reveal className="max-w-2xl">
-        <h2 className="text-balance text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-          Everything your notes need. Nothing they don&apos;t.
+    <section id="features" className="mx-auto max-w-lg px-5 py-20">
+      <Reveal>
+        <h2 className="text-balance text-2xl font-bold tracking-tight text-foreground">
+          Built for notes, not summaries.
         </h2>
-        <p className="mt-4 text-pretty leading-relaxed text-muted-foreground">
-          A focused toolkit for turning a messy pile of material into a single, trustworthy
-          reference.
+        <p className="mt-3 text-pretty leading-relaxed text-muted-foreground text-sm">
+          A quiet workspace for turning a pile of material into one reference you can trust.
         </p>
       </Reveal>
 
-      <div className="mt-12 grid gap-4 sm:grid-cols-2">
+      <div className="mt-10 flex flex-col gap-8">
         {features.map((feature, i) => (
-          <Reveal key={feature.title} delay={i * 80}>
-            <div className="h-full rounded-2xl border border-border bg-card p-7 transition-colors hover:border-white/15">
-              <span className="flex size-9 items-center justify-center rounded-lg border border-border bg-secondary">
-                <feature.icon className="size-[18px] text-accent" />
-              </span>
-              <h3 className="mt-5 text-lg font-semibold text-foreground">{feature.title}</h3>
-              <p className="mt-2 leading-relaxed text-muted-foreground">{feature.description}</p>
-            </div>
+          <Reveal key={feature.title} delay={i * 60}>
+            <article className="flex gap-4">
+              <feature.icon className="size-8 shrink-0 text-accent/70" />
+              <div>
+                <h3 className="text-base font-semibold text-foreground">{feature.title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                  {feature.description}
+                </p>
+              </div>
+            </article>
+            {i < features.length - 1 && <hr className="pixel-divider mt-8" />}
           </Reveal>
         ))}
       </div>

@@ -1,17 +1,26 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono, Playfair_Display } from 'next/font/google'
+import { Geist, Geist_Mono, IBM_Plex_Mono, Pixelify_Sans } from 'next/font/google'
+import { VaultStoreProvider } from '@/lib/vault-store'
+import { MascotProvider } from '@/components/mascot/mascot-provider'
 import './globals.css'
 
 const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
-const playfair = Playfair_Display({ subsets: ['latin'], variable: '--font-playfair' })
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-ibm-plex-mono',
+})
+const pixelifySans = Pixelify_Sans({
+  subsets: ['latin'],
+  variable: '--font-pixelify-sans',
+})
 
 export const metadata: Metadata = {
-  title: 'PDF-Crab — Turn scattered notes into one Master Note',
+  title: 'PDF-Crab — Knowledge workspace for master notes',
   description:
-    'Upload multiple PDFs or handwritten notes and automatically generate one complete, non-repetitive Master Note while preserving diagrams, formulas, formatting and original wording.',
-  generator: 'v0.app',
+    'Upload PDFs and handwritten notes. Compile them into one master note — original wording preserved, duplicates removed.',
   icons: {
     icon: [
       {
@@ -33,7 +42,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: '#0f1115',
+  themeColor: '#08090c',
 }
 
 export default function RootLayout({
@@ -42,9 +51,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`dark ${geistSans.variable} ${geistMono.variable} ${playfair.variable}`}>
+    <html lang="en" className={`dark ${geistSans.variable} ${geistMono.variable} ${ibmPlexMono.variable} ${pixelifySans.variable}`}>
       <body className="bg-background font-sans antialiased text-foreground selection:bg-accent/20 selection:text-accent">
-        {children}
+        <VaultStoreProvider>
+          <MascotProvider>
+            {children}
+          </MascotProvider>
+        </VaultStoreProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

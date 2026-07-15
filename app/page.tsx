@@ -5,6 +5,7 @@ import { Hero } from '@/components/hero'
 import { Features } from '@/components/features'
 import { Workflow } from '@/components/workflow'
 import { SiteFooter } from '@/components/site-footer'
+import { CrabCaretaker } from '@/components/mascot/crab-caretaker'
 
 export default function Page() {
   return (
@@ -15,6 +16,9 @@ export default function Page() {
         <Hero />
         <Features />
         <Workflow />
+        <div className="mx-auto max-w-lg px-5 py-6 flex justify-center">
+          <CrabCaretaker />
+        </div>
         <SiteFooter />
       </main>
     </AppShell>

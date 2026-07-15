@@ -32,13 +32,13 @@ export function KebabMenu({ items, label = 'More actions' }: { items: MenuItem[]
           e.stopPropagation()
           setOpen((v) => !v)
         }}
-        className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+        className="flex size-10 min-h-10 min-w-10 items-center justify-center text-muted-foreground transition-colors duration-200 hover:text-foreground touch-highlight-active"
       >
         <MoreHorizontal className="size-4" />
       </button>
 
       {open ? (
-        <div className="absolute right-0 top-9 z-20 w-40 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-xl">
+        <div className="absolute right-0 top-10 z-20 w-40 overflow-hidden rounded-[3px] border border-border bg-popover p-1 animate-slide-fade">
           {items.map((item) => (
             <button
               key={item.label}
@@ -50,7 +50,7 @@ export function KebabMenu({ items, label = 'More actions' }: { items: MenuItem[]
                 item.onSelect()
               }}
               className={cn(
-                'flex w-full items-center rounded-lg px-3 py-2 text-left text-sm transition-colors',
+                'flex w-full min-h-10 items-center rounded-[2px] px-3 text-left text-sm transition-colors duration-200',
                 item.destructive
                   ? 'text-destructive hover:bg-destructive/10'
                   : 'text-foreground hover:bg-secondary',

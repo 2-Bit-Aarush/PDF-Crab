@@ -23,7 +23,7 @@ export function AppSidebar() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/logo.svg" alt="" className="size-5" />
         </span>
-        <span className="hidden text-sm font-semibold tracking-tight text-foreground lg:inline">
+        <span className="hidden text-sm font-semibold tracking-tight text-foreground lg:inline font-brand">
           PDF-Crab
         </span>
       </Link>
