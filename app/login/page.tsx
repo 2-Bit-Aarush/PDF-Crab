@@ -1,21 +1,30 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowRight } from 'lucide-react'
 import { PixelBackground } from '@/components/pixel-background'
 import { CrabCaretaker } from '@/components/mascot/crab-caretaker'
+import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
+  const supabase = createClient()
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    router.push('/dashboard')
+  async function handleGoogleLogin() {
+    setErrorMsg('')
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      })
+      if (error) throw error
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Google OAuth failed to start.')
+    }
   }
 
   return (
@@ -37,42 +46,18 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-5">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="email" className="text-xs font-medium text-muted-foreground">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="field-input"
-            />
+        {errorMsg && (
+          <div className="mt-6 rounded-[3px] border border-red-500/20 bg-red-500/5 p-4 text-xs text-red-400">
+            {errorMsg}
           </div>
+        )}
 
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="password" className="text-xs font-medium text-muted-foreground">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="field-input"
-            />
-          </div>
-
-          <Button type="submit" size="lg" className="mt-1 w-full">
-            Enter Archive
+        <div className="mt-8 flex flex-col gap-4">
+          <Button onClick={handleGoogleLogin} size="lg" className="w-full flex items-center justify-center gap-2">
+            Continue with Google
             <ArrowRight className="size-4" />
           </Button>
-        </form>
+        </div>
 
         <CrabCaretaker className="mt-8 justify-center" />
 

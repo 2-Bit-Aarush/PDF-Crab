@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useVaults } from '@/lib/vault-store'
+import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
 import { cn } from '@/lib/utils'
@@ -47,18 +48,21 @@ const COMPILING_PHASES = [
 export default function MasterNotePage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
-  const { getMasterNote, generateMasterNote, addSource } = useVaults()
+  const { getMasterNote, generateMasterNote, fetchVaults } = useVaults()
   const result = getMasterNote(params.id)
 
   const [activeTab, setActiveTab] = useState<TabId>('overview')
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [files, setFiles] = useState<string[]>([])
+  const [files, setFiles] = useState<File[]>([])
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [compilingPhase, setCompilingPhase] = useState<number>(-1)
+  const [isPolling, setIsPolling] = useState(false)
   const { setOverride } = useMascot()
-  const isCompiling = compilingPhase !== -1
+  const isCompiling = compilingPhase !== -1 || isPolling
+
+  const supabase = createClient()
 
   useEffect(() => {
     if (isCompiling) {
@@ -73,25 +77,83 @@ export default function MasterNotePage() {
     return () => setOverride(null)
   }, [isCompiling, activeTab, setOverride])
 
-  function handleCompile() {
+  // Mount check for active compiling jobs
+  useEffect(() => {
     if (!result) return
-    if (compilingPhase !== -1) return
-    setCompilingPhase(0)
+    async function checkActiveJob() {
+      const { data } = await supabase
+        .from('compile_jobs')
+        .select('status, phase')
+        .eq('master_note_id', result!.note.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
 
-    const interval = setInterval(() => {
-      setCompilingPhase((prev) => {
-        if (prev >= COMPILING_PHASES.length - 1) {
-          clearInterval(interval)
-          setTimeout(() => {
-            generateMasterNote(result.note.id)
-            setCompilingPhase(-1)
-            setActiveTab('generated-notes')
-          }, 600)
-          return prev
-        }
-        return prev + 1
-      })
-    }, 700)
+      if (data && (data.status === 'queued' || data.status === 'processing')) {
+        const idx = COMPILING_PHASES.findIndex((p) => p.label === data.phase)
+        setCompilingPhase(idx !== -1 ? idx : 0)
+        setIsPolling(true)
+      }
+    }
+    checkActiveJob()
+  }, [result, supabase])
+
+  // Compile job progress poller
+  useEffect(() => {
+    if (!isPolling || !result) return
+
+    const intervalId = setInterval(async () => {
+      const { data, error } = await supabase
+        .from('compile_jobs')
+        .select('status, phase, error_message')
+        .eq('master_note_id', result.note.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (error) {
+        console.error('Error polling compile job:', error)
+        return
+      }
+
+      if (!data) {
+        setIsPolling(false)
+        setCompilingPhase(-1)
+        return
+      }
+
+      if (data.status === 'completed') {
+        clearInterval(intervalId)
+        setIsPolling(false)
+        setCompilingPhase(-1)
+        await fetchVaults()
+        setActiveTab('generated-notes')
+      } else if (data.status === 'failed') {
+        clearInterval(intervalId)
+        setIsPolling(false)
+        setCompilingPhase(-1)
+        alert(`Compilation failed: ${data.error_message || 'Unknown error'}`)
+      } else {
+        const idx = COMPILING_PHASES.findIndex((p) => p.label === data.phase)
+        setCompilingPhase(idx !== -1 ? idx : 0)
+      }
+    }, 1000)
+
+    return () => clearInterval(intervalId)
+  }, [isPolling, result, supabase, fetchVaults])
+
+  async function handleCompile() {
+    if (!result) return
+    if (isCompiling) return
+
+    try {
+      setCompilingPhase(0)
+      await generateMasterNote(result.note.id)
+      setIsPolling(true)
+    } catch (err: any) {
+      alert(`Could not compile: ${err.message}`)
+      setCompilingPhase(-1)
+    }
   }
 
   if (!result) {
@@ -109,28 +171,52 @@ export default function MasterNotePage() {
 
   function addFiles(list: FileList | null) {
     if (!list) return
-    setFiles((prev) => [...prev, ...Array.from(list).map((f) => f.name)])
+    setFiles((prev) => [...prev, ...Array.from(list)])
   }
 
-  function handleAttach() {
+  async function handleAttach() {
     if (files.length === 0) return
-    files.forEach((name) => addSource(note.id, name.endsWith('.pdf') ? name : `${name}.pdf`))
+
+    for (const file of files) {
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('vaultId', vault.id)
+      formData.append('masterNoteId', note.id)
+
+      let res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (res.status === 409) {
+        const data = await res.json()
+        const reuse = confirm(
+          `${data.message || 'File already exists.'}\nWould you like to reuse the existing document?`
+        )
+        if (reuse) {
+          res = await fetch(`/api/upload?reuse=true`, {
+            method: 'POST',
+            body: formData,
+          })
+        } else {
+          continue
+        }
+      }
+
+      if (!res.ok) {
+        const err = await res.json()
+        alert(`Upload failed for ${file.name}: ${err.message || 'Unknown error'}`)
+      }
+    }
+
     setFiles([])
     setUploadOpen(false)
+    await fetchVaults()
     setActiveTab('sources')
   }
 
-  function handleExport() {
-    const body =
-      `# ${note.title}\n\n` +
-      note.sections.map((s) => `## ${s.heading}\n\n${s.body}\n`).join('\n')
-    const blob = new Blob([body], { type: 'text/markdown' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${note.title.replace(/\s+/g, '-').toLowerCase()}.md`
-    a.click()
-    URL.revokeObjectURL(url)
+  function triggerExport(format: 'markdown' | 'pdf' | 'docx') {
+    window.open(`/api/export?id=${note.id}&format=${format}`, '_blank')
   }
 
   return (
@@ -390,22 +476,44 @@ export default function MasterNotePage() {
           <div className="flex flex-col gap-4">
             <div>
               <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Export
+                Export Master Note
               </h2>
               <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
-                Download this master note as a Markdown file.
+                Download this master note in your preferred format.
               </p>
             </div>
-            <Button
-              size="lg"
-              variant="secondary"
-              onClick={handleExport}
-              disabled={note.sections.length === 0}
-              className="w-full"
-            >
-              <Download className="size-3.5" />
-              Export Markdown
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button
+                size="lg"
+                variant="secondary"
+                onClick={() => triggerExport('markdown')}
+                disabled={note.sections.length === 0}
+                className="w-full"
+              >
+                <Download className="size-3.5" />
+                Export Markdown (.md)
+              </Button>
+              <Button
+                size="lg"
+                variant="secondary"
+                onClick={() => triggerExport('pdf')}
+                disabled={note.sections.length === 0}
+                className="w-full"
+              >
+                <Download className="size-3.5" />
+                Export PDF (.pdf)
+              </Button>
+              <Button
+                size="lg"
+                variant="secondary"
+                onClick={() => triggerExport('docx')}
+                disabled={note.sections.length === 0}
+                className="w-full"
+              >
+                <Download className="size-3.5" />
+                Export Word Document (.doc)
+              </Button>
+            </div>
           </div>
         ) : null}
       </div>
@@ -444,17 +552,17 @@ export default function MasterNotePage() {
 
           {files.length > 0 ? (
             <ul className="flex flex-col gap-1 max-h-40 overflow-y-auto">
-              {files.map((name, i) => (
+              {files.map((file, i) => (
                 <li
-                  key={`${name}-${i}`}
+                  key={`${file.name}-${i}`}
                   className="flex min-h-10 items-center gap-2 px-1 min-w-0"
                 >
                   <PixelPdfIcon className="size-4 shrink-0" />
-                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">{name}</span>
+                  <span className="min-w-0 flex-1 truncate text-xs text-foreground">{file.name}</span>
                   <button
                     type="button"
                     onClick={() => setFiles((prev) => prev.filter((_, idx) => idx !== i))}
-                    aria-label={`Remove ${name}`}
+                    aria-label={`Remove ${file.name}`}
                     className="flex size-8 shrink-0 items-center justify-center text-muted-foreground hover:text-foreground touch-highlight-active"
                   >
                     <X className="size-3.5" />

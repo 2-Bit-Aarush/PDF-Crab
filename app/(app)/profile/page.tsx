@@ -1,25 +1,83 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useVaults } from '@/lib/vault-store'
 import { Button } from '@/components/ui/button'
+import { createClient } from '@/lib/supabase/client'
 
 export default function ProfilePage() {
   const { vaults } = useVaults()
-  const [name, setName] = useState('Alex Morgan')
-  const [email, setEmail] = useState('alex@example.com')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [profile, setProfile] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
   const [saved, setSaved] = useState(false)
+  const supabase = createClient()
 
   const totalNotes = vaults.reduce((sum, v) => sum + v.masterNotes.length, 0)
   const totalSources = vaults.reduce(
     (sum, v) => sum + v.masterNotes.reduce((s, n) => s + n.sources.length, 0),
-    0,
+    0
   )
 
-  function handleSave(e: React.FormEvent) {
+  useEffect(() => {
+    async function load() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+
+      if (data) {
+        setProfile(data)
+        setName(data.full_name || '')
+        setEmail(data.email || '')
+
+        // Generate linking code if empty
+        if (!data.telegram_link_code) {
+          const code = 'crab-' + Math.random().toString(36).substring(2, 8).toUpperCase()
+          await supabase.from('profiles').update({ telegram_link_code: code }).eq('id', user.id)
+          data.telegram_link_code = code
+        }
+
+        // Check for URL redirect links
+        const params = new URLSearchParams(window.location.search)
+        const tgChatId = params.get('tg_chat_id')
+        if (tgChatId) {
+          await supabase.from('profiles').update({ telegram_chat_id: tgChatId }).eq('id', user.id)
+          data.telegram_chat_id = tgChatId
+          alert('Successfully connected to Telegram! You can now close this page and return to the Telegram bot.')
+        }
+
+        setProfile({ ...data })
+      }
+      setLoading(false)
+    }
+    load()
+  }, [supabase])
+
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault()
-    setSaved(true)
-    setTimeout(() => setSaved(false), 1800)
+    if (!profile) return
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ full_name: name, email: email })
+      .eq('id', profile.id)
+
+    if (!error) {
+      setSaved(true)
+      setTimeout(() => setSaved(false), 1800)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="page-shell text-center">
+        <p className="text-sm text-muted-foreground">Reading archive records...</p>
+      </div>
+    )
   }
 
   return (
@@ -70,6 +128,7 @@ export default function ProfilePage() {
             <input
               id="name"
               value={name}
+              required
               onChange={(e) => setName(e.target.value)}
               className="field-input"
             />
@@ -83,6 +142,7 @@ export default function ProfilePage() {
               id="email"
               type="email"
               value={email}
+              required
               onChange={(e) => setEmail(e.target.value)}
               className="field-input"
             />
@@ -90,9 +150,7 @@ export default function ProfilePage() {
 
           <div className="flex items-center justify-between gap-3 mt-1">
             <div className="min-w-[5rem]">
-              {saved && (
-                <span className="text-xs font-medium text-accent">Archive updated</span>
-              )}
+              {saved && <span className="text-xs font-medium text-accent">Archive updated</span>}
             </div>
             <Button type="submit" size="lg">
               Save
@@ -100,6 +158,49 @@ export default function ProfilePage() {
           </div>
         </div>
       </form>
+
+      <hr className="pixel-divider mt-6" />
+
+      <div className="mt-6 flex flex-col gap-4">
+        <div>
+          <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Telegram Integration
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+            Link your archive to the Telegram Bot to upload files and query vaults on the go.
+          </p>
+        </div>
+
+        {profile?.telegram_chat_id ? (
+          <div className="rounded-[3px] border border-accent/20 bg-accent/5 p-4 text-sm text-foreground">
+            ✓ Connected to Telegram account{' '}
+            <b>{profile.telegram_username ? `@${profile.telegram_username}` : 'linked'}</b>
+          </div>
+        ) : (
+          <div className="rounded-[3px] border border-border p-4 flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              1. Open Telegram and search for <b>@pdf_crab_bot</b>.
+              <br />
+              2. Send the following command to link your account:
+            </p>
+            <div className="flex items-center justify-between bg-secondary/40 px-3 py-2 text-xs font-mono text-accent rounded-[3px]">
+              <span>/start {profile?.telegram_link_code || 'loading...'}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (profile?.telegram_link_code) {
+                    navigator.clipboard.writeText(`/start ${profile.telegram_link_code}`)
+                    alert('Command copied to clipboard!')
+                  }
+                }}
+                className="text-[10px] uppercase text-muted-foreground hover:text-foreground font-sans font-medium"
+              >
+                Copy
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

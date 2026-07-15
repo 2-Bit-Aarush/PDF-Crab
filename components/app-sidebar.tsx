@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { LayoutGrid, Search, User, Settings, LogOut } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 const nav = [
   { label: 'Vaults', href: '/dashboard', icon: LayoutGrid },
@@ -15,6 +16,12 @@ const nav = [
 export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
+  const supabase = createClient()
+
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push('/login')
+  }
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 flex w-16 flex-col border-r border-border bg-card/60 py-4 backdrop-blur-sm lg:w-60">
@@ -51,7 +58,7 @@ export function AppSidebar() {
 
       <div className="px-2 lg:px-3">
         <button
-          onClick={() => router.push('/login')}
+          onClick={handleLogout}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
         >
           <LogOut className="size-[18px] shrink-0" />

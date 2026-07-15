@@ -55,11 +55,11 @@ export function VaultManager() {
     return () => setOverride(null)
   }, [isDeleting, isVaultsEmpty, setOverride])
 
-  function submitCreate(e: React.FormEvent) {
+  async function submitCreate(e: React.FormEvent) {
     e.preventDefault()
     const name = newName.trim()
     if (!name) return
-    const id = createVault(name)
+    const id = await createVault(name)
     setNewName('')
     setCreateOpen(false)
     router.push(`/vault/${id}`)

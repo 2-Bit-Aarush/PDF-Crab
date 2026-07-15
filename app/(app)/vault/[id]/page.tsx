@@ -26,6 +26,13 @@ export default function VaultDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const { setOverride } = useMascot()
 
+  const notes = useMemo(() => {
+    if (!vault) return []
+    return vault.masterNotes.filter((n) =>
+      n.title.toLowerCase().includes(query.trim().toLowerCase()),
+    )
+  }, [vault, query])
+
   const isNotesEmpty = notes.length === 0
 
   useEffect(() => {
@@ -39,13 +46,6 @@ export default function VaultDetailPage() {
     return () => setOverride(null)
   }, [deleteOpen, isNotesEmpty, setOverride])
 
-  const notes = useMemo(() => {
-    if (!vault) return []
-    return vault.masterNotes.filter((n) =>
-      n.title.toLowerCase().includes(query.trim().toLowerCase()),
-    )
-  }, [vault, query])
-
   if (!vault) {
     return (
       <div className="page-shell text-center">
@@ -57,11 +57,11 @@ export default function VaultDetailPage() {
     )
   }
 
-  function submitCreate(e: React.FormEvent) {
+  async function submitCreate(e: React.FormEvent) {
     e.preventDefault()
     const title = noteTitle.trim()
     if (!title) return
-    const id = createMasterNote(vault!.id, title)
+    const id = await createMasterNote(vault!.id, title)
     setNoteTitle('')
     setCreateOpen(false)
     router.push(`/master/${id}`)
