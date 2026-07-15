@@ -12,7 +12,7 @@ export function CrabCaretaker({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'flex items-start gap-3 max-w-xs sm:max-w-sm select-none animate-slide-fade text-left pr-4',
+        'flex items-start gap-4 max-w-xs sm:max-w-sm select-none animate-slide-fade text-left pr-4 py-1',
         className
       )}
       aria-live="polite"
@@ -20,9 +20,9 @@ export function CrabCaretaker({ className }: { className?: string }) {
       <PixelCrabIcon
         state={state}
         pose={pose}
-        className="size-[22px] shrink-0 text-accent/70 mt-0.5"
+        className="size-15 shrink-0 text-accent mt-0.5"
       />
-      <p className="font-pixelify text-[11px] leading-relaxed text-muted-foreground whitespace-pre-line tracking-wide">
+      <p className="font-pixelify text-[11px] leading-relaxed text-muted-foreground whitespace-pre-line tracking-wide pt-0.5">
         {dialogue}
       </p>
     </div>

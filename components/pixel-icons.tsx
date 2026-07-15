@@ -128,6 +128,7 @@ export function PixelCrabIcon({ className, state = 'default', pose = 'A' }: Pixe
   return (
     <svg
       viewBox="0 0 16 16"
+      shapeRendering="crispEdges"
       className={cn('size-4 text-accent fill-current shrink-0', className)}
       aria-hidden="true"
     >

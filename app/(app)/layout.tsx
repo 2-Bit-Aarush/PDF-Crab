@@ -8,8 +8,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       <main className="w-full flex-1">
         {children}
       </main>
-      <div className="mx-auto w-full max-w-md px-5 pb-6">
-        <hr className="pixel-divider mb-6" />
+      <div className="mx-auto w-full max-w-md px-5 pb-8 mt-4">
+        <hr className="pixel-divider mb-8" />
         <CrabCaretaker />
       </div>
       <BottomNav />
