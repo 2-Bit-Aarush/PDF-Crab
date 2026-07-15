@@ -48,8 +48,8 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated user away from login/landing
-  if (user && (pathname === '/login' || pathname === '/')) {
+  // Redirect authenticated user away from login
+  if (user && pathname === '/login') {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)

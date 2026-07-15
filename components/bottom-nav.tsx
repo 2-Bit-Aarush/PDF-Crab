@@ -38,28 +38,62 @@ export function BottomNav() {
     setCreateOpen(true)
   }
 
-  function handleCreateVault(e: React.FormEvent) {
+  async function handleCreateVault(e: React.FormEvent) {
     e.preventDefault()
     const name = vaultName.trim()
     if (!name) return
-    const id = createVault(name)
-    setVaultName('')
-    setCreateType(null)
-    setCreateOpen(false)
-    router.push(`/vault/${id}`)
+    try {
+      console.log('[bottom-nav] Creating vault stage: Init with name:', name)
+      const id = await createVault(name)
+      console.log('[bottom-nav] createVault stage: Success. ID:', id)
+      setVaultName('')
+      setCreateType(null)
+      setCreateOpen(false)
+      console.log('[bottom-nav] Navigating to /vault/' + id)
+      router.push(`/vault/${id}`)
+    } catch (err: any) {
+      console.error('[bottom-nav] Failed to create vault:', err)
+      if (err && typeof err === 'object') {
+        console.error("Supabase Error:", err)
+        console.error("Code:", err.code)
+        console.error("Message:", err.message)
+        console.error("Details:", err.details)
+        console.error("Hint:", err.hint)
+        console.error("Status:", err.status)
+      }
+      const errMsg = err.message || err.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+      alert(`Error creating vault:\n${errMsg}`)
+    }
   }
 
-  function handleCreateNote(e: React.FormEvent) {
+  async function handleCreateNote(e: React.FormEvent) {
     e.preventDefault()
     const title = noteTitle.trim()
     const targetVaultId = activeVaultId || selectedVaultId || (vaults.length > 0 ? vaults[0].id : '')
     if (!title || !targetVaultId) return
-    const id = createMasterNote(targetVaultId, title)
-    setNoteTitle('')
-    setSelectedVaultId('')
-    setCreateType(null)
-    setCreateOpen(false)
-    router.push(`/master/${id}`)
+    try {
+      console.log('[bottom-nav] Creating master note stage: Init with title:', title)
+      const id = await createMasterNote(targetVaultId, title)
+      console.log('[bottom-nav] createMasterNote stage: Success. ID:', id)
+      setNoteTitle('')
+      setSelectedVaultId('')
+      setCreateType(null)
+      setCreateOpen(false)
+      console.log('[bottom-nav] Navigating to /master/' + id)
+      router.push(`/master/${id}`)
+    } catch (err: any) {
+      console.error('[bottom-nav] Failed to create master note:', err)
+      if (err && typeof err === 'object') {
+        console.error("Supabase Error:", err)
+        console.error("Code:", err.code)
+        console.error("Message:", err.message)
+        console.error("Details:", err.details)
+        console.error("Hint:", err.hint)
+        console.error("Status:", err.status)
+      }
+      const errMsg = err.message || err.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+      alert(`Error creating master note:\n${errMsg}`)
+    }
   }
 
   return (

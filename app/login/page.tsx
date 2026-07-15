@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { ArrowRight } from 'lucide-react'
@@ -11,6 +11,14 @@ import { createClient } from '@/lib/supabase/client'
 export default function LoginPage() {
   const [errorMsg, setErrorMsg] = useState('')
   const supabase = createClient()
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const err = params.get('error_description') || params.get('error')
+    if (err) {
+      setErrorMsg(decodeURIComponent(err))
+    }
+  }, [])
 
   async function handleGoogleLogin() {
     setErrorMsg('')

@@ -59,10 +59,27 @@ export function VaultManager() {
     e.preventDefault()
     const name = newName.trim()
     if (!name) return
-    const id = await createVault(name)
-    setNewName('')
-    setCreateOpen(false)
-    router.push(`/vault/${id}`)
+    try {
+      console.log('[submitCreate] Creating vault: stage Init with name:', name)
+      const id = await createVault(name)
+      console.log('[submitCreate] createVault stage Success. ID:', id)
+      setNewName('')
+      setCreateOpen(false)
+      console.log('[submitCreate] Navigating to /vault/' + id)
+      router.push(`/vault/${id}`)
+    } catch (err: any) {
+      console.error('[submitCreate] Failed to create vault stage Error:', err)
+      if (err && typeof err === 'object') {
+        console.error("Supabase Error:", err)
+        console.error("Code:", err.code)
+        console.error("Message:", err.message)
+        console.error("Details:", err.details)
+        console.error("Hint:", err.hint)
+        console.error("Status:", err.status)
+      }
+      const errMsg = err.message || err.details || (typeof err === 'object' ? JSON.stringify(err) : String(err))
+      alert(`Error creating vault:\n${errMsg}`)
+    }
   }
 
   function submitRename(e: React.FormEvent) {

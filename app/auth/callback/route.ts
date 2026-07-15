@@ -6,22 +6,20 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/dashboard'
 
+  // Check if error query parameters are present in the redirect from Supabase
+  const errorParam = searchParams.get('error')
+  const errorDesc = searchParams.get('error_description')
+  if (errorParam || errorDesc) {
+    const msg = errorDesc || errorParam || 'Authentication failed'
+    return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(msg)}`)
+  }
+
   if (code) {
     const supabase = await createClient()
-
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-    console.log("Exchange Data:", data)
-    console.error("Exchange Error:", error)
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (error) {
-      return NextResponse.json(
-        {
-          success: false,
-          error,
-        },
-        { status: 500 }
-      )
+      return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`)
     }
 
     const forwardedHost = request.headers.get('x-forwarded-host')
@@ -36,11 +34,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json(
-    {
-      success: false,
-      error: "No authorization code received",
-    },
-    { status: 400 }
-  )
+  return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent('No authorization code received')}`)
 }

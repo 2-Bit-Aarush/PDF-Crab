@@ -3,6 +3,33 @@
 import { createContext, useContext, useMemo, useState, useEffect, useCallback } from 'react'
 import { createClient } from './supabase/client'
 
+function formatSupabaseError(error: any): Error {
+  if (!error) return new Error('Unknown database error')
+  console.error("Supabase Error:", error)
+  console.error("Code:", error.code)
+  console.error("Message:", error.message)
+  console.error("Details:", error.details)
+  console.error("Hint:", error.hint)
+  console.error("Status:", error.status)
+
+  const detailLines = [
+    error.message ? `Message: ${error.message}` : 'Database error occurred',
+    error.code ? `Code: ${error.code}` : '',
+    error.details ? `Details: ${error.details}` : '',
+    error.hint ? `Hint: ${error.hint}` : '',
+    error.status ? `Status: ${error.status}` : ''
+  ].filter(Boolean)
+
+  const err = new Error(detailLines.join('\n'))
+  Object.assign(err, {
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+    status: error.status
+  })
+  return err
+}
+
 export type SourcePdf = { id: string; name: string; pages: number }
 
 export type TimelineEntry = { id: string; label: string; date: string }
@@ -168,27 +195,47 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
       loading,
       fetchVaults,
       async createVault(name) {
+        console.log('[createVault] Creating vault stage: Init with name:', name)
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('Unauthenticated')
 
-        const { data, error } = await supabase
-          .from('vaults')
-          .insert({ name, owner_id: user.id })
-          .select()
-          .single()
+        console.log("User:", user?.id);
 
-        if (error) throw error
+        const payload = {
+          name,
+          owner_id: user.id
+        };
+
+        console.log("Payload:", payload);
+
+        console.log('[createVault] Sending insert request to Supabase...')
+        const result = await supabase
+          .from('vaults')
+          .insert(payload)
+
+        console.log("Supabase Response Result:", result);
+
+        const { data, error } = result;
+
+        if (error) {
+          console.error("Full Error Object:", error);
+          console.error('[createVault] Insert failed:', error)
+          throw formatSupabaseError(error)
+        }
+
+        console.log('[createVault] Insert succeeded. Vault ID:', data?.id || 'null')
+        console.log('[createVault] Triggering fetchVaults for local store sync...')
         await fetchVaults()
-        return data.id
+        return data?.id || 'temp-id'
       },
       async renameVault(id, name) {
         const { error } = await supabase.from('vaults').update({ name }).eq('id', id)
-        if (error) throw error
+        if (error) throw formatSupabaseError(error)
         await fetchVaults()
       },
       async deleteVault(id) {
         const { error } = await supabase.from('vaults').delete().eq('id', id)
-        if (error) throw error
+        if (error) throw formatSupabaseError(error)
         await fetchVaults()
       },
       getVault(id) {
@@ -202,24 +249,33 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
         return undefined
       },
       async createMasterNote(vaultId, title) {
+        console.log('[createMasterNote] Creating master note stages: Init with title:', title)
         const { data, error } = await supabase
           .from('master_notes')
           .insert({ vault_id: vaultId, title })
           .select()
           .single()
 
-        if (error) throw error
+        console.log('[createMasterNote] Supabase response received. Data:', data, 'Error:', error)
+
+        if (error) {
+          console.error('[createMasterNote] Insert failed:', error)
+          throw formatSupabaseError(error)
+        }
+
+        console.log('[createMasterNote] Insert succeeded. Note ID:', data.id)
+        console.log('[createMasterNote] Triggering fetchVaults for local store sync...')
         await fetchVaults()
         return data.id
       },
       async renameMasterNote(id, title) {
         const { error } = await supabase.from('master_notes').update({ title }).eq('id', id)
-        if (error) throw error
+        if (error) throw formatSupabaseError(error)
         await fetchVaults()
       },
       async deleteMasterNote(id) {
         const { error } = await supabase.from('master_notes').delete().eq('id', id)
-        if (error) throw error
+        if (error) throw formatSupabaseError(error)
         await fetchVaults()
       },
       async generateMasterNote(id) {
