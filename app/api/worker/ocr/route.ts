@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { GoogleVisionOCRProvider } from '@/lib/ocr/vision'
+import { getOCRProvider } from '@/lib/ocr/provider'
 import { recordTelemetry } from '@/lib/dev-logger'
 
 export async function POST(request: Request) {
@@ -49,8 +49,8 @@ export async function POST(request: Request) {
 
     const buffer = Buffer.from(await fileData.arrayBuffer())
 
-    // 4. Run Google Cloud Vision OCR
-    const provider = new GoogleVisionOCRProvider()
+    // 4. Run OCR Provider
+    const provider = getOCRProvider()
     const ocrResult = await provider.extractText(buffer).catch(async (err) => {
       await adminSupabase
         .from('ocr_jobs')

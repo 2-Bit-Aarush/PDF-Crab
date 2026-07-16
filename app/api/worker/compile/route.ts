@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { GroqAIProvider } from '@/lib/ai/groq'
 import { recordTelemetry } from '@/lib/dev-logger'
+import { buildCompilerSystemPrompt } from '@/lib/ai/compiler-rules'
 
 export async function POST(request: Request) {
   const startTime = Date.now()
@@ -80,8 +81,8 @@ export async function POST(request: Request) {
 
         if (!downloadError && fileData) {
           const buffer = Buffer.from(await fileData.arrayBuffer())
-          const { GoogleVisionOCRProvider } = await import('@/lib/ocr/vision')
-          const ocrProvider = new GoogleVisionOCRProvider()
+          const { getOCRProvider } = await import('@/lib/ocr/provider')
+          const ocrProvider = getOCRProvider()
           const ocrResult = await ocrProvider.extractText(buffer).catch(() => null)
           if (ocrResult) {
             documentsText.push({
@@ -109,47 +110,50 @@ export async function POST(request: Request) {
       throw new Error('All source document text inputs are empty or missing OCR annotations')
     }
 
-    // 4. Chunk & Summarize Sources (Comparing Information)
+    // 4. Align & Extract Sources (Knowledge Alignment)
     await transitionState('Comparing Information', 65)
     const provider = new GroqAIProvider()
-    const summaries: string[] = []
+    const alignedKnowledge: string[] = []
     let totalInputTokens = 0
     let totalOutputTokens = 0
 
     for (const doc of documentsText) {
       // Chunk size around 4000 characters
       const chunks = doc.text.match(/[\s\S]{1,4000}/g) || [doc.text]
-      const chunkSummaries: string[] = []
+      const chunkSegments: string[] = []
 
       for (let i = 0; i < chunks.length; i++) {
-        const chunkPrompt = `Summarize this text segment from the source document "${doc.name}" (part ${i + 1}/${chunks.length}). Preserve formulas, names, headings, equations, and tables verbatim.\n\nText:\n${chunks[i]}`
-        const res = await provider.complete(chunkPrompt, 'You are an elite, highly precise technical summarizing assistant.')
-        chunkSummaries.push(res.text)
+        const chunkPrompt = `Extract and align the academic knowledge from this text segment of the source document "${doc.name}" (part ${i + 1}/${chunks.length}) for compilation. Preserve all definitions, examples, procedures, technical terms, derivations, proofs, formulas, names, headings, equations, and tables verbatim. Do not shorten or omit explanations; capture all details.\n\nText:\n${chunks[i]}`
+        const res = await provider.complete(chunkPrompt, buildCompilerSystemPrompt('You are an elite academic knowledge compiler. You do not summarize; you extract and structure all information precisely, preserving all technical details and wording.'))
+        chunkSegments.push(res.text)
         totalInputTokens += res.inputTokens
         totalOutputTokens += res.outputTokens
       }
 
-      summaries.push(`Document: "${doc.name}"\nSummarized Content:\n${chunkSummaries.join('\n')}`)
+      alignedKnowledge.push(`Document: "${doc.name}"\nExtracted Content:\n${chunkSegments.join('\n')}`)
     }
 
-    // 5. Compile Master Note (Building Knowledge Graph)
+    // 5. Compile Compiled Document / Master Note (Knowledge Alignment & Compilation)
     await transitionState('Building Knowledge Graph', 85)
-    const mergedSummaries = summaries.join('\n\n---\n\n')
+    const mergedSegments = alignedKnowledge.join('\n\n---\n\n')
 
     const compilePrompt = `You are PDF-Crab, a premium academic knowledge compiler.
-We have collected summaries of the documents in this research vault.
-Compile a single, unified, comprehensive Master Note.
+We have extracted and aligned the detailed knowledge segments from the documents in this research vault.
+Compile a single, unified, comprehensive Compiled Document (user-facing: Master Note).
 
 Instructions:
+- Merge multiple documents into one authoritative master document representing the union of all source knowledge.
+- Only remove duplicated information. If two explanations or concepts complement one another, combine them into one comprehensive explanation without losing information.
+- Never intentionally shorten explanations or simplify concepts. When uncertain, preserve information.
 - Group contents into logical chapters or heading blocks.
 - Every major section should begin with a markdown header: ## [Section Heading Title]
-- Do NOT output extra text or chat wrappers (like "Here is your note..."). Start directly with ## Overview or the first heading.
-- Do NOT hallucinate.
-- Preserve technical definitions, math formulas, equations, and tabular data.
+- Do NOT output extra text or chat wrappers. Start directly with the first heading.
+- Preserve formulas, derivations, definitions, proofs, examples, procedures, and technical terminology verbatim.
+- Maintain source traceability.
 
-Source summaries:\n${mergedSummaries}`
+Source documents content:\n${mergedSegments}`
 
-    const finalRes = await provider.complete(compilePrompt, 'You are an expert technical notes editor. Output clean Markdown only.')
+    const finalRes = await provider.complete(compilePrompt, buildCompilerSystemPrompt('You are an expert academic compiler. Output clean Markdown only. Do not summarize or shorten contents.'))
     totalInputTokens += finalRes.inputTokens
     totalOutputTokens += finalRes.outputTokens
 

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { createClient } from '@/lib/supabase/client'
 
 function Toggle({ checked, label }: { checked: boolean; label: string }) {
   return (
@@ -28,6 +29,14 @@ function Toggle({ checked, label }: { checked: boolean; label: string }) {
 
 export default function SettingsPage() {
   const router = useRouter()
+  const supabase = createClient()
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    await fetch('/auth/signout', { method: 'POST' })
+    window.location.href = '/'
+  }
+
   const [autoCompile, setAutoCompile] = useState(true)
   const [preserveFormatting, setPreserveFormatting] = useState(true)
   const [emailDigest, setEmailDigest] = useState(false)
@@ -115,7 +124,7 @@ export default function SettingsPage() {
         <Button
           variant="destructive"
           size="lg"
-          onClick={() => router.push('/login')}
+          onClick={handleSignOut}
           className="mt-4 w-full"
         >
           Sign out

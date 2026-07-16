@@ -1,3 +1,5 @@
+import { MistralOCRProvider } from './mistral'
+
 export interface OCRProvider {
   extractText(pdfBuffer: Buffer): Promise<{
     text: string
@@ -5,4 +7,8 @@ export interface OCRProvider {
     confidence: number
     rawData?: any
   }>
+}
+
+export function getOCRProvider(): OCRProvider {
+  return new MistralOCRProvider()
 }

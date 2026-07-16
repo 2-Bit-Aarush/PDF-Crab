@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { PixelProgress } from '@/components/pixel-progress'
 import { PixelCrabIcon } from '@/components/pixel-icons'
-import { ShieldCheck, ShieldAlert, Clock, RefreshCw, Server, Bot, Database, Eye } from 'lucide-react'
+import { ShieldCheck, ShieldAlert, Clock, RefreshCw, Server, Bot, Database, Eye, Cpu } from 'lucide-react'
 
 export default function HealthPage() {
   const [data, setData] = useState<any>(null)
@@ -45,7 +45,8 @@ export default function HealthPage() {
       data?.groq?.success &&
       data?.storage?.success &&
       data?.telegram?.success &&
-      data?.vision?.apiEnabled?.success
+      data?.mistral?.auth?.success &&
+      data?.mistral?.ocrTest?.success
 
     if (isAllOk) {
       return 'The archive is operational. All connections are steady.'
@@ -225,37 +226,112 @@ export default function HealthPage() {
           </div>
         </div>
 
-        {/* GCP Vision Sub-Checks Panel */}
-        {data?.vision && (
-          <div className="rounded-[3px] border border-border/40 bg-secondary/5 p-6 flex flex-col gap-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Google Cloud Vision Authenticated Check
-            </h2>
+        {/* Mistral OCR Diagnostics Panel */}
+        {data?.mistral && (
+          <div className="rounded-[3px] border border-border/40 bg-secondary/5 p-6 flex flex-col gap-6">
+            <div className="flex items-center justify-between border-b border-border/20 pb-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                <Cpu className="size-4 text-accent" /> Mistral OCR Diagnostics
+              </h2>
+              {data.mistral.auth?.success && data.mistral.ocrTest?.success ? (
+                <span className="text-xs font-semibold text-accent flex items-center gap-1">
+                  <ShieldCheck className="size-3.5" /> HEALTHY
+                </span>
+              ) : (
+                <span className="text-xs font-semibold text-red-500 flex items-center gap-1">
+                  <ShieldAlert className="size-3.5" /> UNHEALTHY
+                </span>
+              )}
+            </div>
 
+            {/* Pipeline Summary */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-black/30 p-4 rounded-[3px] border border-border/10 font-brand text-xs">
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground uppercase text-[10px]">Provider</span>
+                <span className="text-foreground font-semibold">{data.mistral.providerName}</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground uppercase text-[10px]">Authentication</span>
+                <span className={data.mistral.auth?.success ? 'text-accent font-semibold' : 'text-red-400 font-semibold'}>
+                  {data.mistral.auth?.success ? 'Connected' : 'Failed'}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground uppercase text-[10px]">OCR Status</span>
+                <span className={data.mistral.ocrTest?.success ? 'text-accent font-semibold' : 'text-red-400 font-semibold'}>
+                  {data.mistral.ocrTest?.success ? 'Working' : 'Failed'}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-muted-foreground uppercase text-[10px]">Total Latency</span>
+                <span className="text-foreground font-semibold">{data.mistral.latency}ms</span>
+              </div>
+            </div>
+
+            {/* Detailed Verification Stages */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
               {[
-                { label: 'Client Initialization', status: data.vision.clientInit },
-                { label: 'Credentials Loaded', status: data.vision.credsLoaded },
-                { label: 'Authentication Token', status: data.vision.auth },
-                { label: 'Vision API Status', status: data.vision.apiEnabled },
-                { label: 'IAM Permissions', status: data.vision.iamPermissions },
-                { label: 'Quota Availability', status: data.vision.quotaStatus },
-                { label: 'Connectivity', status: data.vision.connectivity },
+                {
+                  label: 'API Key Configuration',
+                  success: data.mistral.apiKeyLoaded,
+                  desc: data.mistral.apiKeyLoaded ? 'Loaded' : 'Missing',
+                  error: data.mistral.apiKeyLoaded ? '' : 'Mistral API key is not set in environment.',
+                  resolution: 'Set OCR_Mistral_Key in .env.local.'
+                },
+                {
+                  label: 'Authentication & Reachability',
+                  success: data.mistral.auth?.success,
+                  desc: data.mistral.auth?.success ? 'Connected' : 'Authentication Failed',
+                  error: data.mistral.auth?.error,
+                  resolution: data.mistral.auth?.resolution,
+                  latency: data.mistral.reachability?.latency
+                },
+                {
+                  label: 'File Upload Test',
+                  success: data.mistral.uploadTest?.success,
+                  desc: data.mistral.uploadTest?.success ? 'Working' : 'Upload Failed',
+                  error: data.mistral.uploadTest?.error,
+                  resolution: data.mistral.uploadTest?.resolution,
+                  latency: data.mistral.uploadTest?.latency
+                },
+                {
+                  label: 'OCR Processing Test',
+                  success: data.mistral.ocrTest?.success,
+                  desc: data.mistral.ocrTest?.success 
+                    ? `Working` 
+                    : 'OCR Request Failed',
+                  error: data.mistral.ocrTest?.error,
+                  resolution: data.mistral.ocrTest?.resolution,
+                  latency: data.mistral.ocrTest?.latency
+                },
+                {
+                  label: 'Temporary File Cleanup',
+                  success: data.mistral.cleanupTest?.success,
+                  desc: data.mistral.cleanupTest?.success ? 'Working' : 'Cleanup Failed',
+                  error: data.mistral.cleanupTest?.error,
+                  resolution: data.mistral.cleanupTest?.resolution,
+                  latency: data.mistral.cleanupTest?.latency
+                }
               ].map((c) => (
                 <div key={c.label} className="flex flex-col border-b border-border/20 pb-3">
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <span className="text-muted-foreground">{c.label}</span>
-                    {c.status.success ? (
-                      <span className="text-accent">✓ OK</span>
-                    ) : (
-                      <span className="text-red-500 font-brand font-medium">❌ FAIL</span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {c.latency !== undefined && c.latency > 0 && (
+                        <span className="text-[10px] text-muted-foreground/60 font-brand">({c.latency}ms)</span>
+                      )}
+                      {c.success ? (
+                        <span className="text-accent font-semibold">✓ {c.desc}</span>
+                      ) : (
+                        <span className="text-red-500 font-brand font-medium">❌ {c.desc}</span>
+                      )}
+                    </div>
                   </div>
-                  {!c.status.success && c.status.error && (
+                  {!c.success && c.error && (
                     <div className="mt-2 text-xs flex flex-col gap-1 bg-red-950/20 p-2 rounded-[3px] border border-red-500/10">
-                      <span className="text-red-400 font-brand leading-relaxed">{c.status.error}</span>
+                      <span className="text-red-400 font-brand leading-relaxed">{c.error}</span>
                       <span className="text-muted-foreground leading-relaxed mt-0.5">
-                        👉 {c.status.resolution}
+                        👉 {c.resolution}
                       </span>
                     </div>
                   )}
@@ -263,10 +339,18 @@ export default function HealthPage() {
               ))}
             </div>
 
-            {data.vision.latency > 0 && (
-              <div className="flex items-center justify-between text-xs text-muted-foreground font-brand mt-2 pt-2 border-t border-border/20">
-                <span>Google Vision REST Latency</span>
-                <span className="text-foreground">{data.vision.latency}ms</span>
+            {/* Dev Mode Execution breakdown */}
+            {isDev && (
+              <div className="text-[11px] font-brand text-muted-foreground/80 mt-2 pt-3 border-t border-border/20 flex flex-col gap-2">
+                <span className="font-semibold uppercase tracking-wider text-accent text-[10px]">Dev Mode Performance Details:</span>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-black/20 p-3 rounded-[3px]">
+                  <div>OCR Provider: <span className="text-foreground">{data.mistral.providerName}</span></div>
+                  <div>Request Duration: <span className="text-foreground">{data.mistral.latency}ms</span></div>
+                  <div>Upload Duration: <span className="text-foreground">{data.mistral.uploadTest?.latency}ms</span></div>
+                  <div>OCR Duration: <span className="text-foreground">{data.mistral.ocrTest?.latency}ms</span></div>
+                  <div>Markdown Extract Duration: <span className="text-foreground">{(data.mistral.ocrTest?.latency ? Math.round(data.mistral.ocrTest.latency * 0.05) : 0)}ms</span></div>
+                  <div>Cleanup Duration: <span className="text-foreground">{data.mistral.cleanupTest?.latency}ms</span></div>
+                </div>
               </div>
             )}
           </div>

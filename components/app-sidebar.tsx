@@ -20,7 +20,8 @@ export function AppSidebar() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
-    router.push('/')
+    await fetch('/auth/signout', { method: 'POST' })
+    window.location.href = '/'
   }
 
   return (
