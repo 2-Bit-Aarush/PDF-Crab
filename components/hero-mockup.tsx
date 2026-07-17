@@ -12,8 +12,8 @@ const timeline = [
 
 export function HeroMockup() {
   return (
-    <div className="overflow-hidden rounded-[3px] border border-border bg-[#0a0b0e]">
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
+    <div className="card-base overflow-hidden border-border/50 max-w-md mx-auto">
+      <div className="flex items-center gap-2 border-b border-border/50 px-4 py-2.5 bg-secondary/30">
         <span className="font-brand text-[10px] text-muted-foreground tracking-wide">
           Organic Chemistry · Master Note
         </span>
@@ -26,10 +26,10 @@ export function HeroMockup() {
         </div>
 
         <div className="space-y-2">
-          <div className="h-2.5 w-2/5 rounded-[2px] bg-foreground/15" />
+          <div className="h-2.5 w-2/5 rounded-[2px] bg-foreground/10" />
           <div className="h-2 w-full rounded-[2px] bg-secondary" />
           <div className="h-2 w-11/12 rounded-[2px] bg-secondary" />
-          <div className="my-3 rounded-[3px] border border-border/50 bg-secondary/50 px-3 py-2 font-brand text-[11px] text-muted-foreground">
+          <div className="my-3 rounded-[6px] border border-border/50 bg-secondary/50 px-3 py-2 font-brand text-[11px] text-muted-foreground">
             CH₂=CH₂ + Br₂ → CH₂BrCH₂Br
           </div>
           <div className="h-2 w-4/5 rounded-[2px] bg-secondary" />
@@ -64,7 +64,7 @@ export function HeroMockup() {
             {timeline.map((t) => (
               <div key={t.label} className="flex items-center gap-2">
                 <span
-                  className={`size-1.5 shrink-0 ${t.done ? 'bg-accent' : 'bg-muted-foreground/30'}`}
+                  className={`size-1.5 shrink-0 rounded-[2px] ${t.done ? 'bg-accent' : 'bg-muted-foreground/30'}`}
                 />
                 <span
                   className={`text-[11px] ${t.done ? 'text-foreground' : 'text-muted-foreground'}`}

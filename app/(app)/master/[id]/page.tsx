@@ -1,11 +1,13 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useVaults } from '@/lib/vault-store'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/ui/modal'
+import { Input } from '@/components/ui/input'
+import { KebabMenu } from '@/components/ui/kebab-menu'
 import { cn } from '@/lib/utils'
 import {
   ArrowLeft,
@@ -14,6 +16,13 @@ import {
   Clock,
   UploadCloud,
   X,
+  Search,
+  FileText,
+  Sigma,
+  BookOpen,
+  GitBranch,
+  Layers,
+  Eye,
 } from 'lucide-react'
 import {
   PixelDocIcon,
@@ -24,15 +33,17 @@ import {
 import { PixelProgress } from '@/components/pixel-progress'
 import { EmptyArchive } from '@/components/empty-archive'
 import { useMascot } from '@/components/mascot/mascot-context'
+import { PixelProgressRing } from '@/components/pixel-progress'
+import { Reveal } from '@/components/reveal'
 
 const TABS = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'generated-notes', label: 'Notes' },
-  { id: 'sources', label: 'Sources' },
-  { id: 'formula-sheet', label: 'Formulas' },
-  { id: 'definitions', label: 'Definitions' },
-  { id: 'knowledge-timeline', label: 'Timeline' },
-  { id: 'export', label: 'Export' },
+  { id: 'overview', label: 'Overview', icon: FileText },
+  { id: 'generated-notes', label: 'Notes', icon: FileText },
+  { id: 'sources', label: 'Sources', icon: UploadCloud },
+  { id: 'formula-sheet', label: 'Formulas', icon: Sigma },
+  { id: 'definitions', label: 'Definitions', icon: BookOpen },
+  { id: 'knowledge-timeline', label: 'Timeline', icon: GitBranch },
+  { id: 'export', label: 'Export', icon: Download },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -43,7 +54,7 @@ const COMPILING_PHASES = [
   { label: 'Comparing Information', progress: 65 },
   { label: 'Building Knowledge Graph', progress: 85 },
   { label: 'Compiling Master Note', progress: 100 },
-]
+] as const
 
 export default function MasterNotePage() {
   const params = useParams<{ id: string }>()
@@ -77,7 +88,6 @@ export default function MasterNotePage() {
     return () => setOverride(null)
   }, [isCompiling, activeTab, setOverride])
 
-  // Mount check for active compiling jobs
   useEffect(() => {
     if (!result) return
     async function checkActiveJob() {
@@ -98,7 +108,6 @@ export default function MasterNotePage() {
     checkActiveJob()
   }, [result, supabase])
 
-  // Compile job progress poller
   useEffect(() => {
     if (!isPolling || !result) return
 
@@ -161,6 +170,7 @@ export default function MasterNotePage() {
       <div className="page-shell text-center">
         <p className="text-sm text-muted-foreground">This master note is not in the archive.</p>
         <Button className="mt-4" variant="secondary" onClick={() => router.push('/dashboard')}>
+          <ArrowLeft className="size-3.5" />
           Back to Vaults
         </Button>
       </div>
@@ -241,6 +251,7 @@ export default function MasterNotePage() {
 
         <div className="mt-4 flex gap-2">
           <Button size="lg" onClick={handleCompile} className="flex-1">
+            <PixelMasterNoteIcon className="size-3.5" />
             Compile Master Note
           </Button>
           <Button size="lg" variant="secondary" onClick={() => setUploadOpen(true)} className="flex-1">
@@ -260,20 +271,21 @@ export default function MasterNotePage() {
             type="button"
             onClick={() => setActiveTab(tab.id)}
             className={cn(
-              'shrink-0 min-h-10 px-3 py-2 text-xs font-medium transition-colors duration-200 touch-highlight-active',
+              'shrink-0 min-h-10 px-3 py-2 text-xs font-medium transition-colors duration-200 touch-highlight-active flex items-center gap-1.5',
               activeTab === tab.id
-                ? 'text-accent border-b border-accent'
+                ? 'text-accent border-b-2 border-accent'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
+            <tab.icon className="size-3.5" />
             {tab.label}
           </button>
         ))}
       </nav>
 
       <div className="mt-6">
-        {activeTab === 'overview' ? (
-          <div className="flex flex-col gap-6">
+        {activeTab === 'overview' && (
+          <Reveal className="flex flex-col gap-6">
             <div className="py-1">
               <div className="flex items-end justify-between">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -284,7 +296,7 @@ export default function MasterNotePage() {
                   <span className="text-xs text-muted-foreground font-medium">%</span>
                 </div>
               </div>
-              <PixelProgress value={note.coverage} maxBlocks={12} className="mt-3" />
+              <PixelProgress value={note.coverage} maxBlocks={12} className="mt-3" showLabel label="Coverage" />
               <p className="mt-2 text-xs text-muted-foreground">
                 How much of your uploaded material is merged into this note.
               </p>
@@ -361,11 +373,11 @@ export default function MasterNotePage() {
                 </div>
               )}
             </div>
-          </div>
-        ) : null}
+          </Reveal>
+        )}
 
-        {activeTab === 'generated-notes' ? (
-          <div className="py-1">
+        {activeTab === 'generated-notes' && (
+          <Reveal className="py-1">
             {note.sections.length === 0 ? (
               <EmptyArchive
                 icons={<PixelDocIcon className="size-10" />}
@@ -385,95 +397,103 @@ export default function MasterNotePage() {
                 ))}
               </article>
             )}
-          </div>
-        ) : null}
+          </Reveal>
+        )}
 
-        {activeTab === 'sources' ? (
-          <div>
-            <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              All sources · {note.sources.length}
-            </h2>
-            {note.sources.length === 0 ? (
-              <EmptyArchive
-                icons={
-                  <>
-                    <PixelPdfIcon className="size-9" />
-                    <PixelDocIcon className="size-9 text-accent/50" />
-                  </>
-                }
-                title="No sources yet"
-                description="Add PDFs or handwritten scans to begin compiling."
-                action={
-                  <Button size="sm" variant="outline" onClick={() => setUploadOpen(true)}>
-                    <Plus className="size-3.5" />
-                    Add Sources
-                  </Button>
-                }
-              />
-            ) : (
-              <ul className="flex flex-col">
-                {note.sources.map((s, idx) => (
-                  <div key={s.id}>
-                    {idx > 0 && <hr className="pixel-divider" />}
-                    <li className="list-row touch-highlight-active">
-                      <div className="flex items-center gap-2.5 min-w-0 pr-4">
-                        <PixelPdfIcon className="size-4 shrink-0" />
-                        <span className="truncate text-sm text-foreground">{s.name}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground shrink-0">{s.pages} pg</span>
-                    </li>
-                  </div>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : null}
-
-        {activeTab === 'formula-sheet' ? (
-          <EmptyArchive
-            icons={<PixelDocIcon className="size-9" />}
-            title="Formula sheet empty"
-            description="Compile this master note to extract formulas from your sources."
-          />
-        ) : null}
-
-        {activeTab === 'definitions' ? (
-          <EmptyArchive
-            icons={<PixelDocIcon className="size-9" />}
-            title="No definitions yet"
-            description="Compile this master note to pull out key terms and definitions."
-          />
-        ) : null}
-
-        {activeTab === 'knowledge-timeline' ? (
-          <div>
-            <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Knowledge timeline
-            </h2>
-            {note.timeline.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-2">No timeline entries yet.</p>
-            ) : (
-              <div className="relative pl-6 mt-1">
-                <div className="absolute left-[7px] top-1.5 bottom-1.5 pixel-divider-vertical" />
-                <ul className="flex flex-col gap-5">
-                  {note.timeline.map((t) => (
-                    <li key={t.id} className="relative flex flex-col gap-0.5">
-                      <span className="absolute -left-[22px] top-1.5 size-2 bg-accent pixel-corner" />
-                      <span className="text-sm font-medium text-foreground">{t.label}</span>
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="size-3" />
-                        {t.date}
-                      </span>
-                    </li>
+        {activeTab === 'sources' && (
+          <Reveal>
+            <div>
+              <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                All sources · {note.sources.length}
+              </h2>
+              {note.sources.length === 0 ? (
+                <EmptyArchive
+                  icons={
+                    <>
+                      <PixelPdfIcon className="size-9" />
+                      <PixelDocIcon className="size-9 text-accent/50" />
+                    </>
+                  }
+                  title="No sources yet"
+                  description="Add PDFs or handwritten scans to begin compiling."
+                  action={
+                    <Button size="sm" variant="outline" onClick={() => setUploadOpen(true)}>
+                      <Plus className="size-3.5" />
+                      Add Sources
+                    </Button>
+                  }
+                />
+              ) : (
+                <ul className="flex flex-col">
+                  {note.sources.map((s, idx) => (
+                    <div key={s.id}>
+                      {idx > 0 && <hr className="pixel-divider" />}
+                      <li className="list-row touch-highlight-active">
+                        <div className="flex items-center gap-2.5 min-w-0 pr-4">
+                          <PixelPdfIcon className="size-4 shrink-0" />
+                          <span className="truncate text-sm text-foreground">{s.name}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground shrink-0">{s.pages} pg</span>
+                      </li>
+                    </div>
                   ))}
                 </ul>
-              </div>
-            )}
-          </div>
-        ) : null}
+              )}
+            </div>
+          </Reveal>
+        )}
 
-        {activeTab === 'export' ? (
-          <div className="flex flex-col gap-4">
+        {activeTab === 'formula-sheet' && (
+          <Reveal>
+            <EmptyArchive
+              icons={<PixelDocIcon className="size-9" />}
+              title="Formula sheet empty"
+              description="Compile this master note to extract formulas from your sources."
+            />
+          </Reveal>
+        )}
+
+        {activeTab === 'definitions' && (
+          <Reveal>
+            <EmptyArchive
+              icons={<PixelDocIcon className="size-9" />}
+              title="No definitions yet"
+              description="Compile this master note to pull out key terms and definitions."
+            />
+          </Reveal>
+        )}
+
+        {activeTab === 'knowledge-timeline' && (
+          <Reveal>
+            <div>
+              <h2 className="mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Knowledge timeline
+              </h2>
+              {note.timeline.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">No timeline entries yet.</p>
+              ) : (
+                <div className="relative pl-6 mt-1">
+                  <div className="absolute left-[7px] top-1.5 bottom-1.5 pixel-divider-vertical" />
+                  <ul className="flex flex-col gap-5">
+                    {note.timeline.map((t) => (
+                      <li key={t.id} className="relative flex flex-col gap-0.5">
+                        <span className="absolute -left-[22px] top-1.5 size-2 bg-accent pixel-corner" />
+                        <span className="text-sm font-medium text-foreground">{t.label}</span>
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="size-3" />
+                          {t.date}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </Reveal>
+        )}
+
+        {activeTab === 'export' && (
+          <Reveal className="flex flex-col gap-4">
             <div>
               <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Export Master Note
@@ -488,37 +508,46 @@ export default function MasterNotePage() {
                 variant="secondary"
                 onClick={() => triggerExport('markdown')}
                 disabled={note.sections.length === 0}
-                className="w-full"
+                className="w-full justify-start gap-3"
               >
                 <Download className="size-3.5" />
-                Export Markdown (.md)
+                <div className="text-left">
+                  <div className="font-medium text-foreground">Export Markdown (.md)</div>
+                  <div className="text-xs text-muted-foreground">Plain text with markdown formatting</div>
+                </div>
               </Button>
               <Button
                 size="lg"
                 variant="secondary"
                 onClick={() => triggerExport('pdf')}
                 disabled={note.sections.length === 0}
-                className="w-full"
+                className="w-full justify-start gap-3"
               >
                 <Download className="size-3.5" />
-                Export PDF (.pdf)
+                <div className="text-left">
+                  <div className="font-medium text-foreground">Export PDF (.pdf)</div>
+                  <div className="text-xs text-muted-foreground">Formatted document ready to print</div>
+                </div>
               </Button>
               <Button
                 size="lg"
                 variant="secondary"
                 onClick={() => triggerExport('docx')}
                 disabled={note.sections.length === 0}
-                className="w-full"
+                className="w-full justify-start gap-3"
               >
                 <Download className="size-3.5" />
-                Export Word Document (.doc)
+                <div className="text-left">
+                  <div className="font-medium text-foreground">Export Word Document (.docx)</div>
+                  <div className="text-xs text-muted-foreground">Editable Microsoft Word format</div>
+                </div>
               </Button>
             </div>
-          </div>
-        ) : null}
+          </Reveal>
+        )}
       </div>
 
-      <Modal open={uploadOpen} onClose={() => setUploadOpen(false)} title="Add Sources">
+      <Modal open={uploadOpen} onClose={() => setUploadOpen(false)} title="Add Sources" description="Drop PDFs or image scans to attach as source documents.">
         <div className="flex flex-col gap-4">
           <div
             onDragOver={(e) => {
@@ -533,7 +562,7 @@ export default function MasterNotePage() {
             }}
             onClick={() => inputRef.current?.click()}
             className={cn(
-              'flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-[3px] border border-dashed p-6 text-center transition-colors duration-200',
+              'flex min-h-[120px] cursor-pointer flex-col items-center justify-center rounded-[8px] border border-dashed p-6 text-center transition-colors duration-200',
               dragging ? 'border-accent bg-accent/5' : 'border-border hover:border-white/10',
             )}
           >
@@ -598,7 +627,7 @@ export default function MasterNotePage() {
             <div className="flex flex-col items-center gap-3">
               <PixelCrabIcon state="compiling" className="size-[64px] text-accent" />
               <p className="font-brand text-xs text-muted-foreground uppercase tracking-wider">
-                Indexing sources
+                Compiling knowledge...
               </p>
             </div>
 

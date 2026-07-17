@@ -209,13 +209,11 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
         console.log("Payload:", payload);
 
         console.log('[createVault] Sending insert request to Supabase...')
-        const result = await supabase
+        const { data, error } = await supabase
           .from('vaults')
           .insert(payload)
-
-        console.log("Supabase Response Result:", result);
-
-        const { data, error } = result;
+          .select()
+          .single()
 
         if (error) {
           console.error("Full Error Object:", error);
