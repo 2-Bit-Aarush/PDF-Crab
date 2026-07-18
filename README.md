@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./public/banner.png" alt="PDF-Crab Banner">
+  <img src="./public/Banner.png" alt="PDF-Crab Banner">
 </p>
 
 # 🦀 PDF-Crab
