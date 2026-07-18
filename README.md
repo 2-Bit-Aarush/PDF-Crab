@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./public/github-banner.png" alt="PDF-Crab Banner">
+</p>
+
 # 🦀 PDF-Crab
 
 > Transform scattered PDFs into one organized, study-ready notebook.
