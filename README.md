@@ -122,7 +122,7 @@ PDF-Crab focuses on **compilation instead of summarization**, creating notebooks
 Clone the repository:
 
 ```bash
-git clone https://github.com/your-username/pdf-crab.git
+git clone https://github.com/2-Bit-Aarush/PDF-Crab.git
 cd pdf-crab
 ```
 
