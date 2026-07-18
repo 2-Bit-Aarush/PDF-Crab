@@ -65,6 +65,8 @@ type VaultContextValue = {
   renameMasterNote: (id: string, title: string) => Promise<void>
   deleteMasterNote: (id: string) => Promise<void>
   generateMasterNote: (id: string) => Promise<void>
+  deleteDocument: (id: string) => Promise<void>
+  renameDocument: (id: string, name: string) => Promise<void>
   addSource: (noteId: string, name: string) => void
 }
 
@@ -286,6 +288,16 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
           const err = await res.json()
           throw new Error(err.message || 'Compilation failed to queue')
         }
+        await fetchVaults()
+      },
+      async deleteDocument(id) {
+        const { error } = await supabase.from('documents').delete().eq('id', id)
+        if (error) throw formatSupabaseError(error)
+        await fetchVaults()
+      },
+      async renameDocument(id, name) {
+        const { error } = await supabase.from('documents').update({ name }).eq('id', id)
+        if (error) throw formatSupabaseError(error)
         await fetchVaults()
       },
       addSource(noteId, name) {

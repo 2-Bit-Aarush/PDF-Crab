@@ -1,0 +1,23 @@
+
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+      <meta charset="utf-8">
+      <title>Periodic Trends & Molecular Bonds</title>
+      <style>
+        body { font-family: 'Calibri', 'Arial', sans-serif; line-height: 1.6; margin: 1in; }
+        h1 { color: #1e3a8a; font-size: 24pt; border-bottom: 2px solid #1e3a8a; padding-bottom: 6px; }
+        strong { color: #111827; }
+        blockquote { border-left: 3px solid #cbd5e1; padding-left: 10px; color: #4b5563; margin-left: 0; }
+      </style>
+      </head>
+      <body>
+        <h1>Periodic Trends & Molecular Bonds</h1>
+        
+        <h2 style="font-size: 18pt; color: #1e3a8a; margin-top: 24pt; page-break-before: always;">Electronegativity</h2>
+        <div style="font-size: 11pt; color: #333333; line-height: 1.5;">
+          <strong>Definition:</strong><br>> Electronegativity is defined as the tendency of an atom to attract shared electron pairs in a chemical bond.<br><br><strong>Key Explanation:</strong><br>Electronegativity increases across a period from left to right due to increased effective nuclear charge. Fluorine has the highest value of 4.0.<br><br><strong>Visual Snippet:</strong><br><img src="https://supabase.co/assets/docA-zeff-crop.png" alt="Formula" style="max-width: 500px; display: block; margin: 10px 0;"><br><br>*Source: Periodic_Notes.pdf (Page 1)*<br><br><strong>Example:</strong><br>> F is more electronegative than Cl<br><br><strong>Important Points:</strong><br>- Increases across a period from left to right<br>- Decreases down a group as atomic size increases
+        </div>
+      
+      </body>
+      </html>
+    

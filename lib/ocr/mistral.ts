@@ -50,6 +50,8 @@ export class MistralOCRProvider implements OCRProvider {
               type: 'file',
               file_id: fileId,
             },
+            include_image_base64: true,
+            include_blocks: true,
           }),
         })
 

@@ -35,6 +35,8 @@ import { EmptyArchive } from '@/components/empty-archive'
 import { useMascot } from '@/components/mascot/mascot-context'
 import { PixelProgressRing } from '@/components/pixel-progress'
 import { Reveal } from '@/components/reveal'
+import { renderMarkdown } from '@/lib/markdown'
+
 
 const TABS = [
   { id: 'overview', label: 'Overview', icon: FileText },
@@ -56,10 +58,18 @@ const COMPILING_PHASES = [
   { label: 'Compiling Master Note', progress: 100 },
 ] as const
 
+const TIMELINE_STEPS = [
+  { key: 'Indexing Sources', label: 'Indexing Sources', description: 'Cataloging vault files and calculating checksums' },
+  { key: 'Reading Documents', label: 'Reading Documents & OCR', description: 'Running OCR and layout classification' },
+  { key: 'Comparing Information', label: 'Extracting Knowledge Graph', description: 'Extracting formulas, topics, and structures' },
+  { key: 'Building Knowledge Graph', label: 'Building Pedagogical Graph', description: 'Resolving dependency order and merging duplicates' },
+  { key: 'Compiling Master Note', label: 'Composing Digital Notebook', description: 'Running quality checks and typesetting clean markdown' },
+] as const
+
 export default function MasterNotePage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
-  const { getMasterNote, generateMasterNote, fetchVaults } = useVaults()
+  const { getMasterNote, generateMasterNote, fetchVaults, deleteDocument, renameDocument } = useVaults()
   const result = getMasterNote(params.id)
 
   const [activeTab, setActiveTab] = useState<TabId>('overview')
@@ -68,8 +78,53 @@ export default function MasterNotePage() {
   const [dragging, setDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const [replacingDocId, setReplacingDocId] = useState<string | null>(null)
+  const replaceInputRef = useRef<HTMLInputElement>(null)
+
+  const handleTriggerReplace = (docId: string) => {
+    setReplacingDocId(docId)
+    if (replaceInputRef.current) {
+      replaceInputRef.current.value = ''
+      replaceInputRef.current.click()
+    }
+  }
+
+  const handleReplaceFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !replacingDocId || !result) return
+
+    try {
+      console.log('[replaceFile] Deleting old source document:', replacingDocId)
+      await deleteDocument(replacingDocId)
+
+      console.log('[replaceFile] Uploading replacement file:', file.name)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('vaultId', result.vault.id)
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.message || 'Upload failed')
+      }
+
+      console.log('[replaceFile] Replacement upload successful, syncing store...')
+      await fetchVaults()
+    } catch (err: any) {
+      console.error('Failed to replace file:', err)
+      alert(`Error replacing file:\n${err.message || err}`)
+    } finally {
+      setReplacingDocId(null)
+    }
+  }
+
   const [compilingPhase, setCompilingPhase] = useState<number>(-1)
   const [isPolling, setIsPolling] = useState(false)
+  const [compileError, setCompileError] = useState<string | null>(null)
   const { setOverride } = useMascot()
   const isCompiling = compilingPhase !== -1 || isPolling
 
@@ -135,13 +190,14 @@ export default function MasterNotePage() {
         clearInterval(intervalId)
         setIsPolling(false)
         setCompilingPhase(-1)
+        setCompileError(null)
         await fetchVaults()
         setActiveTab('generated-notes')
       } else if (data.status === 'failed') {
         clearInterval(intervalId)
         setIsPolling(false)
         setCompilingPhase(-1)
-        alert(`Compilation failed: ${data.error_message || 'Unknown error'}`)
+        setCompileError(data.error_message || 'Compilation failed')
       } else {
         const idx = COMPILING_PHASES.findIndex((p) => p.label === data.phase)
         setCompilingPhase(idx !== -1 ? idx : 0)
@@ -157,10 +213,11 @@ export default function MasterNotePage() {
 
     try {
       setCompilingPhase(0)
+      setCompileError(null)
       await generateMasterNote(result.note.id)
       setIsPolling(true)
     } catch (err: any) {
-      alert(`Could not compile: ${err.message}`)
+      setCompileError(err.message || 'Could not compile')
       setCompilingPhase(-1)
     }
   }
@@ -241,25 +298,148 @@ export default function MasterNotePage() {
       </button>
 
       <header className="page-header flex flex-col gap-1">
-        <div className="flex items-start gap-2.5">
-          <PixelMasterNoteIcon className="size-5 shrink-0 text-accent/60 mt-0.5" />
-          <h1 className="text-xl font-bold tracking-tight text-foreground">{note.title}</h1>
+        <div className="flex items-start justify-between gap-2.5">
+          <div className="flex items-start gap-2.5">
+            <PixelMasterNoteIcon className="size-5 shrink-0 text-accent/60 mt-0.5" />
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{note.title}</h1>
+          </div>
+          <div className="shrink-0">
+            {isCompiling ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 animate-pulse border border-blue-200">
+                <svg className="animate-spin size-3 text-blue-700" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Compiling...
+              </span>
+            ) : compileError ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+                Compilation Failed
+              </span>
+            ) : note.generated ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
+                <svg className="size-3 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Compiled
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                Draft
+              </span>
+            )}
+          </div>
         </div>
         <p className="text-sm text-muted-foreground">
-          {note.generated ? 'Compiled master note' : 'Draft workspace — add sources, then compile'}
+          {isCompiling 
+            ? `Compiling note contents... ${COMPILING_PHASES[compilingPhase]?.label ? `(${COMPILING_PHASES[compilingPhase].label})` : ''}`
+            : compileError 
+              ? `Error: ${compileError}` 
+              : note.generated 
+                ? 'Compiled master note' 
+                : 'Draft workspace — add sources, then compile'}
         </p>
 
         <div className="mt-4 flex gap-2">
-          <Button size="lg" onClick={handleCompile} className="flex-1">
-            <PixelMasterNoteIcon className="size-3.5" />
-            Compile Master Note
+          <Button 
+            size="lg" 
+            onClick={handleCompile} 
+            disabled={isCompiling} 
+            className="flex-1"
+          >
+            {isCompiling ? (
+              <span className="flex items-center gap-2">
+                <svg className="animate-spin -ml-1 mr-2 size-4 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Compiling...
+              </span>
+            ) : (
+              <>
+                <PixelMasterNoteIcon className="size-3.5" />
+                {compileError ? 'Retry Compilation' : 'Compile Master Note'}
+              </>
+            )}
           </Button>
-          <Button size="lg" variant="secondary" onClick={() => setUploadOpen(true)} className="flex-1">
+          <Button 
+            size="lg" 
+            variant="secondary" 
+            onClick={() => setUploadOpen(true)} 
+            disabled={isCompiling} 
+            className="flex-1"
+          >
             <Plus className="size-3.5" />
             Add Sources
           </Button>
         </div>
       </header>
+
+      { (isCompiling || compileError) && (
+        <div className="mt-6 border border-border bg-card/30 p-5 rounded-lg flex flex-col gap-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Compilation Pipeline Progress
+          </h3>
+          <div className="relative border-l border-border pl-6 ml-3 flex flex-col gap-6">
+            {TIMELINE_STEPS.map((step, idx) => {
+              const isCompleted = idx < compilingPhase && compilingPhase !== -1
+              const isActive = idx === compilingPhase && isCompiling
+              const isFailed = idx === compilingPhase && !!compileError
+              const isFuture = idx > compilingPhase || compilingPhase === -1
+
+              let icon = null
+              if (isCompleted) {
+                icon = (
+                  <span className="absolute -left-[37px] size-6 bg-green-500 rounded-full flex items-center justify-center border-4 border-background">
+                    <svg className="size-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )
+              } else if (isActive) {
+                icon = (
+                  <span className="absolute -left-[37px] size-6 bg-blue-500 rounded-full flex items-center justify-center border-4 border-background animate-pulse">
+                    <svg className="animate-spin size-3 text-white" fill="none" viewBox="0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                  </span>
+                )
+              } else if (isFailed) {
+                icon = (
+                  <span className="absolute -left-[37px] size-6 bg-red-500 rounded-full flex items-center justify-center border-4 border-background">
+                    <span className="text-white text-xs font-bold font-sans">!</span>
+                  </span>
+                )
+              } else {
+                icon = (
+                  <span className="absolute -left-[37px] size-6 bg-muted/30 rounded-full flex items-center justify-center border-4 border-background" />
+                )
+              }
+
+              return (
+                <div key={step.key} className="relative flex flex-col gap-0.5 pl-2">
+                  {icon}
+                  <span className={cn(
+                    "text-xs font-semibold",
+                    isActive ? "text-blue-600 dark:text-blue-400" : isFailed ? "text-red-600 dark:text-red-400" : isCompleted ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
+                  )}>
+                    {step.label}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {step.description}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          {compileError && (
+            <div className="mt-2 text-[11px] font-mono text-red-600 bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-100 dark:border-red-950/40">
+              Error details: {compileError}
+            </div>
+          )}
+        </div>
+      )}
 
       <nav
         aria-label="Workspace tabs"
@@ -392,7 +572,9 @@ export default function MasterNotePage() {
                     <h2 className="text-[15px] font-semibold text-foreground tracking-tight">
                       {s.heading}
                     </h2>
-                    <p className="text-sm leading-relaxed text-foreground/85">{s.body}</p>
+                    <div className="flex flex-col gap-1.5 text-sm leading-relaxed text-foreground/85">
+                      {renderMarkdown(s.body)}
+                    </div>
                   </section>
                 ))}
               </article>
@@ -433,7 +615,43 @@ export default function MasterNotePage() {
                           <PixelPdfIcon className="size-4 shrink-0" />
                           <span className="truncate text-sm text-foreground">{s.name}</span>
                         </div>
-                        <span className="text-xs text-muted-foreground shrink-0">{s.pages} pg</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-muted-foreground">{s.pages} pg</span>
+                          <KebabMenu
+                            items={[
+                              {
+                                label: 'Rename',
+                                onSelect: () => {
+                                  const newName = prompt('Enter new name for the document:', s.name)
+                                  if (newName && newName.trim() && newName !== s.name) {
+                                    renameDocument(s.id, newName.trim()).catch((err) => {
+                                      alert(`Failed to rename document: ${err.message}`)
+                                    })
+                                  }
+                                },
+                              },
+                              {
+                                label: 'Replace',
+                                onSelect: () => handleTriggerReplace(s.id),
+                              },
+                              {
+                                label: 'Delete',
+                                destructive: true,
+                                onSelect: () => {
+                                  if (
+                                    confirm(
+                                      'Are you sure you want to delete this source? This will remove it from the vault and exclude it from future compilations.'
+                                    )
+                                  ) {
+                                    deleteDocument(s.id).catch((err) => {
+                                      alert(`Failed to delete document: ${err.message}`)
+                                    })
+                                  }
+                                },
+                              },
+                            ]}
+                          />
+                        </div>
                       </li>
                     </div>
                   ))}
@@ -654,6 +872,13 @@ export default function MasterNotePage() {
           </div>
         </div>
       )}
+      <input
+        type="file"
+        ref={replaceInputRef}
+        onChange={handleReplaceFileChange}
+        accept="application/pdf"
+        className="hidden"
+      />
     </div>
   )
 }
