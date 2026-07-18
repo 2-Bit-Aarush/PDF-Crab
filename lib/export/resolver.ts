@@ -69,15 +69,42 @@ export class AssetResolver {
         return null;
       }
 
+      // Automatically scan and strip any prepended base64 data URI wrapper bytes
+      let startOffset = 0;
+      for (let i = 0; i < Math.min(buffer.length - 4, 100); i++) {
+        // PNG magic bytes
+        if (buffer[i] === 0x89 && buffer[i+1] === 0x50 && buffer[i+2] === 0x4E && buffer[i+3] === 0x47) {
+          startOffset = i;
+          break;
+        }
+        // JPEG magic bytes
+        if (buffer[i] === 0xFF && buffer[i+1] === 0xD8) {
+          startOffset = i;
+          break;
+        }
+      }
+      if (startOffset > 0) {
+        buffer = buffer.slice(startOffset);
+      }
+
+      // Convert using Jimp to standard PNG buffer to prevent pdfkit "Unknown image format" error
+      try {
+        const { Jimp: JimpLib } = await import('jimp');
+        const img = await JimpLib.read(buffer as Buffer);
+        buffer = await img.getBuffer('image/png');
+      } catch (e) {
+        console.warn('AssetResolver: Jimp normalization failed:', e);
+      }
+
       // 4. Validate image & extract dimensions
-      const validation = this.validateImage(buffer);
+      const validation = this.validateImage(buffer as Buffer);
       if (!validation.valid) {
         console.warn(`AssetResolver: Image validation failed for reference: ${reference}`);
         return null;
       }
 
       return {
-        buffer,
+        buffer: buffer as Buffer,
         contentType: validation.contentType,
         width: validation.width,
         height: validation.height

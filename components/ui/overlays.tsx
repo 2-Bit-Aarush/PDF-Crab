@@ -170,7 +170,7 @@ export function Drawer({
       />
       <div
         className={cn(
-          'fixed right-0 top-0 z-50 h-full animate-slide-in flex flex-col',
+          'fixed right-0 top-0 z-50 h-full w-full animate-slide-in flex flex-col',
           sizes[size]
         )}
         role="dialog"

@@ -36,6 +36,9 @@ import { useMascot } from '@/components/mascot/mascot-context'
 import { PixelProgressRing } from '@/components/pixel-progress'
 import { Reveal } from '@/components/reveal'
 import { renderMarkdown } from '@/lib/markdown'
+import { CrabLoadingAnimation } from '@/components/crab-loading-animation'
+import { SourceEvidenceCard } from '@/components/source-evidence-card'
+import { parseNotebookSection } from '@/lib/export/parser'
 
 
 const TABS = [
@@ -51,20 +54,183 @@ const TABS = [
 type TabId = (typeof TABS)[number]['id']
 
 const COMPILING_PHASES = [
-  { label: 'Indexing Sources', progress: 20 },
-  { label: 'Reading Documents', progress: 45 },
-  { label: 'Comparing Information', progress: 65 },
-  { label: 'Building Knowledge Graph', progress: 85 },
-  { label: 'Compiling Master Note', progress: 100 },
+  { label: 'Preparing OCR', progress: 20 },
+  { label: 'Reading Pages', progress: 45 },
+  { label: 'Understanding Notes', progress: 65 },
+  { label: 'Connecting Topics', progress: 85 },
+  { label: 'Generating Notebook', progress: 100 },
 ] as const
 
 const TIMELINE_STEPS = [
-  { key: 'Indexing Sources', label: 'Indexing Sources', description: 'Cataloging vault files and calculating checksums' },
-  { key: 'Reading Documents', label: 'Reading Documents & OCR', description: 'Running OCR and layout classification' },
-  { key: 'Comparing Information', label: 'Extracting Knowledge Graph', description: 'Extracting formulas, topics, and structures' },
-  { key: 'Building Knowledge Graph', label: 'Building Pedagogical Graph', description: 'Resolving dependency order and merging duplicates' },
-  { key: 'Compiling Master Note', label: 'Composing Digital Notebook', description: 'Running quality checks and typesetting clean markdown' },
+  { key: 'Preparing OCR', label: 'Preparing OCR', description: 'Cataloging vault files and running layout analysis' },
+  { key: 'Reading Pages', label: 'Reading Pages & OCR', description: 'Running OCR annotations page by page' },
+  { key: 'Understanding Notes', label: 'Understanding Notes & Extraction', description: 'Extracting formulas, definitions, and content structures' },
+  { key: 'Connecting Topics', label: 'Connecting Topics & Mapping', description: 'Resolving dependency order and merging duplicates' },
+  { key: 'Generating Notebook', label: 'Generating Notebook & Rendering', description: 'Running quality checks and typesetting clean markdown' },
 ] as const
+
+function CompilationSummaryCard({ note }: { note: any }) {
+  const report = note.compilationReport
+  if (!report) return null
+
+  const sourcesList = note.sources || []
+  const createdDate = new Date(report.createdAt).toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+
+  // Calculate total snippets preserved
+  const snippetsCount = note.sections.reduce((acc: number, s: any) => {
+    try {
+      if (s.ocrSource) {
+        const parsed = typeof s.ocrSource === 'string' ? JSON.parse(s.ocrSource) : s.ocrSource
+        return acc + (parsed.visualAssets?.length || 0)
+      }
+    } catch (e) {}
+    return acc
+  }, 0)
+
+  // Calculate total conflicts detected
+  const conflictsCount = note.sections.reduce((acc: number, s: any) => {
+    try {
+      if (s.ocrSource) {
+        const parsed = typeof s.ocrSource === 'string' ? JSON.parse(s.ocrSource) : s.ocrSource
+        return acc + (parsed.studyIntelligence?.conflicts?.length || 0)
+      }
+    } catch (e) {}
+    return acc
+  }, 0)
+
+  return (
+    <div className="border border-border bg-card/25 rounded-lg p-5 flex flex-col gap-4 shadow-sm mb-6">
+      <div>
+        <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-widest font-brand">
+          Compiled Notebook
+        </h3>
+        <div className="mt-2.5 flex flex-col gap-1.5">
+          <span className="text-[10px] font-semibold text-muted-foreground">Created from:</span>
+          <div className="flex flex-wrap gap-1.5 mt-0.5">
+            {sourcesList.map((src: any) => (
+              <span 
+                key={src.id} 
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-secondary/50 border border-border/40 text-xs text-foreground/90 font-medium"
+              >
+                <span className="text-[10px] text-green-500 font-bold font-brand">✓</span>
+                {src.name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <hr className="border-border/30 border-dashed" />
+
+      <div>
+        <h4 className="text-[11px] font-bold text-foreground/80 tracking-tight">Compilation Summary</h4>
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs text-muted-foreground mt-3">
+          <li className="flex justify-between border-b border-border/10 pb-1.5">
+            <span>Source Documents Processed</span>
+            <span className="font-semibold text-foreground">{sourcesList.length}</span>
+          </li>
+          <li className="flex justify-between border-b border-border/10 pb-1.5">
+            <span>Total Pages Processed</span>
+            <span className="font-semibold text-foreground">{report.pagesProcessed || sourcesList.reduce((acc: number, s: any) => acc + s.pages, 0)}</span>
+          </li>
+          <li className="flex justify-between border-b border-border/10 pb-1.5 sm:border-0 sm:pb-0">
+            <span>Topics Organized</span>
+            <span className="font-semibold text-foreground">{note.sections.length}</span>
+          </li>
+          <li className="flex justify-between border-b border-border/10 pb-1.5 sm:border-0 sm:pb-0">
+            <span>Visual Snippets Preserved</span>
+            <span className="font-semibold text-foreground">{snippetsCount}</span>
+          </li>
+          {report.duplicatesRemoved > 0 && (
+            <li className="flex justify-between border-b border-border/10 pb-1.5 sm:border-0 sm:pb-0 col-span-1 sm:col-span-2">
+              <span>Duplicate Concepts Merged</span>
+              <span className="font-semibold text-green-600 dark:text-green-400">-{report.duplicatesRemoved} nodes</span>
+            </li>
+          )}
+          {conflictsCount > 0 && (
+            <li className="flex justify-between border-b border-border/10 pb-1.5 sm:border-0 sm:pb-0 col-span-1 sm:col-span-2">
+              <span>Conflicting Topics Detected</span>
+              <span className="font-semibold text-red-500">{conflictsCount} issues</span>
+            </li>
+          )}
+          <li className="flex justify-between col-span-1 sm:col-span-2 text-[10px] text-muted-foreground/60 mt-1">
+            <span>Last Compiled Timestamp</span>
+            <span>{createdDate}</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+function getTopicConfidence(topicMetadata: any): {
+  level: 'high' | 'medium' | 'review'
+  label: string
+  color: string
+  explanation: string
+} {
+  const si = topicMetadata?.studyIntelligence || {}
+  const docs = si.coverage?.documents || []
+  const sourcesCount = docs.length
+  const conflicts = si.conflicts || []
+
+  let level: 'high' | 'medium' | 'review' = 'medium'
+  let explanation = 'Limited sources available.'
+
+  if (conflicts.length > 0) {
+    level = 'review'
+    explanation = 'Conflicting information detected in source documents.'
+  } else if (sourcesCount === 1) {
+    level = 'review'
+    explanation = 'Only one source document available for this topic.'
+  } else if (sourcesCount >= 3) {
+    level = 'high'
+    explanation = `Compiled from ${sourcesCount} independent sources.`
+  } else if (sourcesCount === 2) {
+    level = 'medium'
+    explanation = `Compiled from ${sourcesCount} independent sources.`
+  }
+
+  const levelMap = {
+    high: { label: 'High Confidence', color: 'text-green-600 dark:text-green-400 bg-green-500/10 border-green-500/20' },
+    medium: { label: 'Medium Confidence', color: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20' },
+    review: { label: 'Review Recommended', color: 'text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/20' }
+  }
+
+  return {
+    level,
+    explanation,
+    ...levelMap[level]
+  }
+}
+
+function TopicConfidenceIndicator({ ocrSource }: { ocrSource: any }) {
+  if (!ocrSource) return null
+
+  let parsed: any = null
+  try {
+    parsed = typeof ocrSource === 'string' ? JSON.parse(ocrSource) : ocrSource
+  } catch (e) {
+    return null
+  }
+
+  const confidence = getTopicConfidence(parsed)
+
+  return (
+    <div className="flex items-center gap-2 mt-1 mb-2.5">
+      <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-semibold border flex items-center gap-1", confidence.color)}>
+        <span className="size-1.5 rounded-full bg-current" />
+        {confidence.label}
+      </span>
+      <span className="text-[10px] text-muted-foreground font-medium">
+        {confidence.explanation}
+      </span>
+    </div>
+  )
+}
 
 export default function MasterNotePage() {
   const params = useParams<{ id: string }>()
@@ -73,6 +239,13 @@ export default function MasterNotePage() {
   const result = getMasterNote(params.id)
 
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'compiling' | 'success'>('idle')
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadCurrentFile, setUploadCurrentFile] = useState(0)
+  const [uploadTotalFiles, setUploadTotalFiles] = useState(0)
+  const [uploadFileName, setUploadFileName] = useState('')
+  const [isMinimized, setIsMinimized] = useState(false)
+  const [currentPhaseText, setCurrentPhaseText] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
   const [files, setFiles] = useState<File[]>([])
   const [dragging, setDragging] = useState(false)
@@ -155,9 +328,15 @@ export default function MasterNotePage() {
         .maybeSingle()
 
       if (data && (data.status === 'queued' || data.status === 'processing')) {
-        const idx = COMPILING_PHASES.findIndex((p) => p.label === data.phase)
-        setCompilingPhase(idx !== -1 ? idx : 0)
+        const idx = COMPILING_PHASES.findIndex((p) => p.label === data.phase || (data.phase && data.phase.startsWith('Reading Page')))
+        setCompilingPhase(idx !== -1 ? idx : 1)
+        setUploadState('compiling')
         setIsPolling(true)
+        if (data.phase && data.phase.startsWith('Reading Page')) {
+          setCurrentPhaseText(data.phase)
+        } else {
+          setCurrentPhaseText('')
+        }
       }
     }
     checkActiveJob()
@@ -183,24 +362,40 @@ export default function MasterNotePage() {
       if (!data) {
         setIsPolling(false)
         setCompilingPhase(-1)
+        setUploadState('idle')
+        setCurrentPhaseText('')
         return
       }
 
       if (data.status === 'completed') {
         clearInterval(intervalId)
-        setIsPolling(false)
-        setCompilingPhase(-1)
-        setCompileError(null)
+        setUploadState('success')
         await fetchVaults()
-        setActiveTab('generated-notes')
+        
+        setTimeout(async () => {
+          setUploadState('idle')
+          setIsPolling(false)
+          setCompilingPhase(-1)
+          setCompileError(null)
+          setIsMinimized(false)
+          setCurrentPhaseText('')
+          setActiveTab('generated-notes')
+        }, 3500)
       } else if (data.status === 'failed') {
         clearInterval(intervalId)
         setIsPolling(false)
         setCompilingPhase(-1)
+        setUploadState('idle')
+        setCurrentPhaseText('')
         setCompileError(data.error_message || 'Compilation failed')
       } else {
-        const idx = COMPILING_PHASES.findIndex((p) => p.label === data.phase)
-        setCompilingPhase(idx !== -1 ? idx : 0)
+        const idx = COMPILING_PHASES.findIndex((p) => p.label === data.phase || (data.phase && data.phase.startsWith('Reading Page')))
+        setCompilingPhase(idx !== -1 ? idx : 1)
+        if (data.phase && data.phase.startsWith('Reading Page')) {
+          setCurrentPhaseText(data.phase)
+        } else {
+          setCurrentPhaseText('')
+        }
       }
     }, 1000)
 
@@ -212,6 +407,8 @@ export default function MasterNotePage() {
     if (isCompiling) return
 
     try {
+      setIsMinimized(false)
+      setUploadState('compiling')
       setCompilingPhase(0)
       setCompileError(null)
       await generateMasterNote(result.note.id)
@@ -219,6 +416,7 @@ export default function MasterNotePage() {
     } catch (err: any) {
       setCompileError(err.message || 'Could not compile')
       setCompilingPhase(-1)
+      setUploadState('idle')
     }
   }
 
@@ -236,6 +434,20 @@ export default function MasterNotePage() {
 
   const { note, vault } = result
 
+  // Calculate metrics for summary display
+  const sourcesCount = note?.sources?.length || 0
+  const pagesCount = note?.sources?.reduce((acc: number, s: any) => acc + s.pages, 0) || 0
+  const topicsCount = note?.sections?.length || 0
+  const snippetsCount = note?.sections?.reduce((acc: number, s: any) => {
+    try {
+      if (s.ocrSource) {
+        const parsed = typeof s.ocrSource === 'string' ? JSON.parse(s.ocrSource) : s.ocrSource
+        return acc + (parsed.visualAssets?.length || 0)
+      }
+    } catch (e) {}
+    return acc
+  }, 0) || 0
+
   function addFiles(list: FileList | null) {
     if (!list) return
     setFiles((prev) => [...prev, ...Array.from(list)])
@@ -244,7 +456,18 @@ export default function MasterNotePage() {
   async function handleAttach() {
     if (files.length === 0) return
 
-    for (const file of files) {
+    setUploadOpen(false)
+    setIsMinimized(false)
+    setUploadTotalFiles(files.length)
+    setUploadState('uploading')
+    setUploadProgress(0)
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      setUploadCurrentFile(i + 1)
+      setUploadFileName(file.name)
+      setUploadProgress(Math.round((i / files.length) * 100))
+
       const formData = new FormData()
       formData.append('file', file)
       formData.append('vaultId', vault.id)
@@ -276,10 +499,17 @@ export default function MasterNotePage() {
       }
     }
 
-    setFiles([])
-    setUploadOpen(false)
+    setUploadProgress(100)
+    setUploadFileName('Upload Complete!')
+    setUploadState('success')
     await fetchVaults()
-    setActiveTab('sources')
+
+    setTimeout(() => {
+      setUploadState('idle')
+      setFiles([])
+      setUploadOpen(false)
+      setActiveTab('sources')
+    }, 1500)
   }
 
   function triggerExport(format: 'markdown' | 'pdf' | 'docx') {
@@ -340,7 +570,7 @@ export default function MasterNotePage() {
                 : 'Draft workspace — add sources, then compile'}
         </p>
 
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex flex-col sm:flex-row gap-2">
           <Button 
             size="lg" 
             onClick={handleCompile} 
@@ -566,17 +796,111 @@ export default function MasterNotePage() {
               />
             ) : (
               <article className="flex flex-col gap-6">
-                {note.sections.map((s, idx) => (
-                  <section key={s.id} className="flex flex-col gap-2">
-                    {idx > 0 && <hr className="pixel-divider mb-4" />}
-                    <h2 className="text-[15px] font-semibold text-foreground tracking-tight">
-                      {s.heading}
-                    </h2>
-                    <div className="flex flex-col gap-1.5 text-sm leading-relaxed text-foreground/85">
-                      {renderMarkdown(s.body)}
-                    </div>
-                  </section>
-                ))}
+                
+                {/* Compilation Summary Card */}
+                <CompilationSummaryCard note={note} />
+
+                {note.sections.map((s, idx) => {
+                  const blocks = parseNotebookSection({
+                    heading: s.heading,
+                    body: s.body,
+                    metadata: s.ocrSource ? (typeof s.ocrSource === 'string' ? JSON.parse(s.ocrSource) : s.ocrSource) : undefined
+                  })
+
+                  return (
+                    <section key={s.id} className="flex flex-col gap-3">
+                      {idx > 0 && <hr className="pixel-divider mb-4" />}
+                      <h2 className="text-[16px] font-semibold text-foreground tracking-tight">
+                        {blocks.heading}
+                      </h2>
+
+                      {/* Topic Confidence Indicator */}
+                      <TopicConfidenceIndicator ocrSource={s.ocrSource} />
+
+                      {/* 1. Definition */}
+                      {blocks.definition && !blocks.definition.includes('(No verbatim definition') && (
+                        <div className="border border-border/60 bg-secondary/20 p-3.5 rounded border-l-4 border-l-accent/80 text-sm text-foreground/90 my-1">
+                          <span className="font-bold text-[10px] uppercase tracking-wider block text-muted-foreground mb-1 font-brand">Verbatim Definition</span>
+                          <blockquote className="italic">"{blocks.definition}"</blockquote>
+                        </div>
+                      )}
+
+                      {/* 2. Key Points */}
+                      {blocks.keyPoints && blocks.keyPoints.length > 0 && (
+                        <div className="border border-border/60 bg-secondary/10 p-3.5 rounded text-sm text-foreground/80 my-1">
+                          <span className="font-bold text-[10px] uppercase tracking-wider block text-muted-foreground mb-1.5 font-brand">Key Points & Insights</span>
+                          <ul className="list-disc pl-4 space-y-1.5">
+                            {blocks.keyPoints.map((p, i) => (
+                              <li key={i}>
+                                {p.text}
+                                {p.source && (
+                                  <span className="text-[10px] text-muted-foreground font-mono ml-1">({p.source})</span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* 3. Detailed Explanation (Key Explanation) */}
+                      {blocks.explanation && (
+                        <div className="text-sm leading-relaxed text-foreground/85 my-1 flex flex-col gap-1.5">
+                          <span className="font-bold text-[10px] uppercase tracking-wider block text-muted-foreground font-brand">Key Explanation</span>
+                          <div>{renderMarkdown(blocks.explanation, { stripImages: true })}</div>
+                        </div>
+                      )}
+
+                      {/* 4. Important Trends / Tables */}
+                      {blocks.trendsAndTables && (
+                        <div className="text-sm leading-relaxed text-foreground/85 my-1 flex flex-col gap-1.5">
+                          <span className="font-bold text-[10px] uppercase tracking-wider block text-muted-foreground font-brand">Trends & Reference Tables</span>
+                          <div className="overflow-x-auto">{renderMarkdown(blocks.trendsAndTables, { stripImages: true })}</div>
+                        </div>
+                      )}
+
+                      {/* 5. Examples */}
+                      {blocks.examples && blocks.examples.length > 0 && (
+                        <div className="flex flex-col gap-2 my-1">
+                          {blocks.examples.map((ex, i) => (
+                            <div key={i} className="border border-border/60 bg-accent/5 p-3.5 rounded border-l-4 border-l-accent/60 text-sm text-foreground/90">
+                              <span className="font-bold text-[10px] uppercase tracking-wider block text-muted-foreground mb-1 font-brand">Example {i + 1}</span>
+                              <blockquote>{ex.text}</blockquote>
+                              {ex.source && <span className="text-[10px] text-muted-foreground block mt-1 font-mono">Source: {ex.source}</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 6. Notes / Exceptions */}
+                      {blocks.notesAndExceptions && (
+                        <div className="border border-red-500/10 bg-red-500/5 p-3.5 rounded border-l-4 border-l-red-500/50 text-sm text-red-950 dark:text-red-200 my-1">
+                          <span className="font-bold text-[10px] uppercase tracking-wider block text-red-500/80 mb-1 font-brand">Notes & Exceptions</span>
+                          <div>{renderMarkdown(blocks.notesAndExceptions, { stripImages: true })}</div>
+                        </div>
+                      )}
+
+                      {/* 7. Original Source Evidence (grouped visual assets at the very end of explanation) */}
+                      {blocks.sourceEvidence && blocks.sourceEvidence.length > 0 && (
+                        <div className="my-1.5 flex flex-col gap-2">
+                          <span className="font-bold text-[10px] uppercase tracking-wider block text-muted-foreground font-brand">Original Source Evidence</span>
+                          <SourceEvidenceCard assets={blocks.sourceEvidence.map((se, i) => ({
+                            id: `se-${i}-${idx}`,
+                            imageUrl: se.url,
+                            subType: se.caption,
+                            source: se.source
+                          }))} />
+                        </div>
+                      )}
+
+                      {/* Citations / Page References */}
+                      {blocks.metadata?.pageReferences && blocks.metadata.pageReferences.length > 0 && (
+                        <div className="text-[10px] text-muted-foreground/75 italic mt-1 font-mono">
+                          Sources: Compiled from source notes (Pages {blocks.metadata.pageReferences.join(', ')})
+                        </div>
+                      )}
+                    </section>
+                  )
+                })}
               </article>
             )}
           </Reveal>
@@ -839,39 +1163,63 @@ export default function MasterNotePage() {
         </div>
       </Modal>
 
-      {compilingPhase !== -1 && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/96 px-6 animate-slide-fade">
-          <div className="w-full max-w-sm flex flex-col gap-6">
-            <div className="flex flex-col items-center gap-3">
-              <PixelCrabIcon state="compiling" className="size-[64px] text-accent" />
-              <p className="font-brand text-xs text-muted-foreground uppercase tracking-wider">
-                Compiling knowledge...
-              </p>
-            </div>
+      {uploadState !== 'idle' && !isMinimized && (
+        <CrabLoadingAnimation
+          uploadState={uploadState}
+          uploadProgress={uploadProgress}
+          uploadCurrentFile={uploadCurrentFile}
+          uploadTotalFiles={uploadTotalFiles}
+          uploadFileName={uploadFileName}
+          currentPhaseText={currentPhaseText}
+          compilingPhase={compilingPhase}
+          compilingPhases={COMPILING_PHASES}
+          onMinimize={() => setIsMinimized(true)}
+          sourcesCount={sourcesCount}
+          pagesCount={pagesCount}
+          topicsCount={topicsCount}
+          snippetsCount={snippetsCount}
+        />
+      )}
 
-            <div className="flex flex-col gap-3">
-              {COMPILING_PHASES.map((phase, idx) => (
-                <div
-                  key={phase.label}
-                  className={cn(
-                    'flex items-center justify-between text-sm transition-opacity duration-200',
-                    idx <= compilingPhase ? 'text-foreground' : 'text-muted-foreground/30',
-                  )}
-                >
-                  <span>{phase.label}</span>
-                  {idx <= compilingPhase && (
-                    <PixelProgress value={phase.progress} maxBlocks={10} className="text-[11px]" />
-                  )}
-                </div>
-              ))}
+      {/* Compact Minimized Progress Pill */}
+      {uploadState !== 'idle' && isMinimized && (
+        <div className="fixed bottom-[calc(76px+env(safe-area-inset-bottom)+24px)] right-5 z-40 bg-card border border-border shadow-lg px-4 py-2.5 rounded-full flex items-center gap-3 animate-slide-fade max-w-sm">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-accent"></span>
+          </span>
+          <div className="flex flex-col">
+            <span className="text-[11px] font-bold text-foreground">
+              {uploadState === 'uploading' 
+                ? `Uploading: ${uploadCurrentFile}/${uploadTotalFiles}` 
+                : compilingPhase !== -1 && COMPILING_PHASES[compilingPhase]
+                  ? (COMPILING_PHASES[compilingPhase].label === 'Reading Pages' && currentPhaseText ? currentPhaseText : COMPILING_PHASES[compilingPhase].label)
+                  : 'Compiling...'}
+            </span>
+            <div className="w-24 mt-1">
+              <div className="h-[3px] bg-secondary rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-accent transition-all duration-300"
+                  style={{ 
+                    width: `${uploadState === 'uploading' 
+                      ? uploadProgress 
+                      : compilingPhase !== -1 && COMPILING_PHASES[compilingPhase]
+                        ? COMPILING_PHASES[compilingPhase].progress 
+                        : 0}%` 
+                  }}
+                />
+              </div>
             </div>
-
-            <p className="text-center font-brand text-[10px] text-muted-foreground/60">
-              build 0.1.0 · pdf-crab
-            </p>
           </div>
+          <button
+            onClick={() => setIsMinimized(false)}
+            className="ml-2 text-[10px] font-bold text-accent hover:underline cursor-pointer"
+          >
+            Restore
+          </button>
         </div>
       )}
+
       <input
         type="file"
         ref={replaceInputRef}

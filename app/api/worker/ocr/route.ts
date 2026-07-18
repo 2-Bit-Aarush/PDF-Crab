@@ -42,7 +42,7 @@ async function cropPdfRegion(
   const h = (coords.y2 - coords.y1) * scaleY
 
   // Add small padding around the cropped region to avoid cutting off boundaries
-  const padding = 6
+  const padding = 2
   const paddedX = Math.max(0, x - padding)
   const paddedY = Math.max(0, y - padding)
   const paddedW = Math.min(pdfWidth - paddedX, w + 2 * padding)
@@ -58,11 +58,11 @@ async function cropPdfRegion(
     viewportScale: 3.0, // High-resolution scale
   })
 
-  if (!result || result.length === 0) {
+  if (!result || result.length === 0 || !result[0].content) {
     throw new Error('PDF conversion returned no image pages')
   }
 
-  return result[0].content
+  return result[0].content as Buffer
 }
 
 async function cropImageRegion(
@@ -82,6 +82,105 @@ async function cropImageRegion(
   
   image.crop({ x, y, w, h })
   return await image.getBuffer('image/png')
+}
+
+function getContextAwareCoordinates(
+  block: any,
+  allBlocks: any[],
+  pageDims: { width: number; height: number }
+): { x1: number; y1: number; x2: number; y2: number } {
+  let x1 = block.top_left_x ?? 0
+  let y1 = block.top_left_y ?? 0
+  let x2 = block.bottom_right_x ?? pageDims.width
+  let y2 = block.bottom_right_y ?? pageDims.height
+
+  let mergedAny = true
+  const mergedIndices = new Set<number>()
+
+  while (mergedAny) {
+    mergedAny = false
+    for (let i = 0; i < allBlocks.length; i++) {
+      if (allBlocks[i] === block || mergedIndices.has(i)) continue
+
+      const c = allBlocks[i]
+      const cx1 = c.top_left_x ?? 0
+      const cy1 = c.top_left_y ?? 0
+      const cx2 = c.bottom_right_x ?? pageDims.width
+      const cy2 = c.bottom_right_y ?? pageDims.height
+
+      // Check vertical proximity (within 85px) and horizontal overlap/proximity
+      const horizontalOverlap = Math.max(cx1, x1) <= Math.min(cx2, x2) + 80
+      const verticalProximity = 
+        (cy2 >= y1 - 85 && cy1 <= y2 + 85) || 
+        (y2 >= cy1 - 85 && y1 <= cy2 + 85)
+
+      if (horizontalOverlap && verticalProximity) {
+        x1 = Math.min(x1, cx1)
+        y1 = Math.min(y1, cy1)
+        x2 = Math.max(x2, cx2)
+        y2 = Math.max(y2, cy2)
+        mergedIndices.add(i)
+        mergedAny = true
+      }
+    }
+  }
+
+  return { x1, y1, x2, y2 }
+}
+
+function getAdaptivePadding(
+  coords: { x1: number; y1: number; x2: number; y2: number },
+  classification: { type: 'text' | 'visual'; subType: string },
+  scienceInfo: { semanticType: string }
+): number {
+  const w = coords.x2 - coords.x1
+  const h = coords.y2 - coords.y1
+
+  const isEquation = 
+    classification.subType === 'Formula' || 
+    classification.subType === 'Mathematical Equation' || 
+    classification.subType === 'Chemistry Equation' || 
+    scienceInfo.semanticType === 'Scientific Notation' || 
+    scienceInfo.semanticType === 'Mathematical Expression';
+
+  const isTable = 
+    classification.subType === 'Table' || 
+    scienceInfo.semanticType === 'Scientific Table';
+
+  const isGraph = 
+    classification.subType === 'Graph';
+
+  const isDiagram = 
+    classification.subType === 'Diagram' || 
+    classification.subType === 'Circuit Diagram' || 
+    classification.subType === 'Flowchart' || 
+    classification.subType === 'Lewis Structure' || 
+    classification.subType === 'Reaction Mechanism' || 
+    scienceInfo.semanticType === 'Scientific Diagram';
+
+  if (isEquation) {
+    if (w < 300 && h < 100) {
+      return 45 // 30–60 px surrounding margin
+    }
+    return 30
+  }
+
+  if (isGraph) {
+    return 40 // Preserve complete graph with labels
+  }
+
+  if (isTable) {
+    return 25 // Preserve entire table
+  }
+
+  if (isDiagram) {
+    if (w > 450 || h > 550) {
+      return 10
+    }
+    return 20
+  }
+
+  return 20
 }
 
 function classifyBlock(block: any): { type: 'text' | 'visual'; subType: string } {
@@ -303,12 +402,55 @@ export async function POST(request: Request) {
             }
 
             const scienceInfo = detectScientific(block, classification)
+
+            // Force visual type for all scientific/symbolic notations, graphs, and tables
+            const isSymbolic = 
+              scienceInfo.semanticType === 'Mathematical Expression' ||
+              scienceInfo.semanticType === 'Scientific Notation' ||
+              scienceInfo.semanticType === 'Chemical Equation / Structure' ||
+              scienceInfo.semanticType === 'Scientific Table' ||
+              scienceInfo.semanticType === 'Scientific Diagram' ||
+              ['Formula', 'Mathematical Equation', 'Chemistry Equation', 'Reaction Mechanism', 'Circuit Diagram', 'Graph', 'Table'].includes(classification.subType);
+
+            if (isSymbolic) {
+              classification.type = 'visual';
+              if (classification.subType === 'Paragraph' || classification.subType === 'Bullet List' || classification.subType === 'Heading') {
+                if (scienceInfo.semanticType === 'Mathematical Expression') {
+                  classification.subType = 'Mathematical Equation';
+                } else if (scienceInfo.semanticType === 'Scientific Notation') {
+                  classification.subType = 'Formula';
+                } else if (scienceInfo.semanticType === 'Chemical Equation / Structure') {
+                  classification.subType = 'Chemistry Equation';
+                } else if (scienceInfo.semanticType === 'Scientific Table') {
+                  classification.subType = 'Table';
+                } else {
+                  classification.subType = 'Diagram';
+                }
+              }
+            }
+
+            // Compute context-aware coordinates and adaptive padding for visual crops
+            let finalCoords = coords
+            let padding = 10
+
+            if (classification.type === 'visual') {
+              const contextCoords = getContextAwareCoordinates(block, page.blocks || [], pageDims)
+              padding = getAdaptivePadding(contextCoords, classification, scienceInfo)
+
+              finalCoords = {
+                x1: Math.max(0, contextCoords.x1 - padding),
+                y1: Math.max(0, contextCoords.y1 - padding),
+                x2: Math.min(pageDims.width, contextCoords.x2 + padding),
+                y2: Math.min(pageDims.height, contextCoords.y2 + padding)
+              }
+            }
+
             const docBlock: DocBlock = {
               id: crypto.randomUUID(),
               type: classification.type,
               subType: classification.subType,
               content: block.content || '',
-              coordinates: coords,
+              coordinates: finalCoords,
               pageIndex: pIdx,
               semanticType: scienceInfo.semanticType,
               protectedContent: scienceInfo.protectedContent,
@@ -318,8 +460,8 @@ export async function POST(request: Request) {
             if (classification.type === 'visual' && block.top_left_x !== undefined) {
               try {
                 const cropBuffer = document.mime_type?.startsWith('image/')
-                  ? await cropImageRegion(buffer, pageDims, coords)
-                  : await cropPdfRegion(buffer, pIdx, pageDims, coords)
+                  ? await cropImageRegion(buffer, pageDims, finalCoords)
+                  : await cropPdfRegion(buffer, pIdx, pageDims, finalCoords)
                 const fileName = `users/${document.owner_id}/vaults/${document.vault_id}/assets/${document.id}-${pIdx}-${block.type || 'visual'}-${bIdx}.png`
  
                 const { error: uploadErr } = await adminSupabase.storage
@@ -347,7 +489,14 @@ export async function POST(request: Request) {
           for (const img of page.images) {
             if (img.image_base64) {
               try {
-                const imgBuffer = Buffer.from(img.image_base64, 'base64')
+                let cleanBase64 = img.image_base64.trim()
+                if (cleanBase64.startsWith('data:')) {
+                  const commaIdx = cleanBase64.indexOf(',')
+                  if (commaIdx !== -1) {
+                    cleanBase64 = cleanBase64.substring(commaIdx + 1)
+                  }
+                }
+                const imgBuffer = Buffer.from(cleanBase64, 'base64')
                 const fileName = `users/${document.owner_id}/vaults/${document.vault_id}/assets/${document.id}-${pIdx}-${img.id}`
                 
                 const { error: uploadErr } = await adminSupabase.storage
@@ -367,6 +516,8 @@ export async function POST(request: Request) {
                     coordinates: { x1: 0, y1: 0, x2: pageDims.width, y2: pageDims.height },
                     imageUrl: publicUrl,
                     pageIndex: pIdx,
+                    semanticType: 'Scientific Diagram',
+                    protectedContent: false,
                   })
                 }
               } catch (e) {

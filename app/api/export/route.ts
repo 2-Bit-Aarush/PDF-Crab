@@ -25,17 +25,23 @@ export async function GET(request: Request) {
       .single()
 
     if (noteError || !note) {
-      return NextResponse.json({ message: 'Master note not found' }, { status: 404 })
+      return NextResponse.json({ message: 'Master note not found in database' }, { status: 404 })
     }
 
     const sections = (note.note_sections || []).sort(
       (a: any, b: any) => a.display_order - b.display_order
     )
-    const filename = note.title.replace(/\s+/g, '-').toLowerCase()
+
+    if (sections.length === 0) {
+      return NextResponse.json({ message: 'This notebook contains no content. Please attach sources and run compile first.' }, { status: 400 })
+    }
+
+    const noteTitle = note.title || 'untitled-notebook'
+    const filename = noteTitle.replace(/\s+/g, '-').toLowerCase()
 
     // Map database structures to the canonical NotebookViewModel
     const model: NotebookViewModel = {
-      title: note.title,
+      title: noteTitle,
       sections: sections.map((s: any) => {
         let metadata: any = undefined
         try {
@@ -46,8 +52,8 @@ export async function GET(request: Request) {
           // Fallback if parsing fails or column is empty
         }
         return {
-          heading: s.heading,
-          body: s.body,
+          heading: s.heading || 'Untitled Section',
+          body: s.body || '',
           metadata,
         }
       }),

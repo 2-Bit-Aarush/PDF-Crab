@@ -146,7 +146,7 @@ function AppLayoutContent({ children }: { children: React.ReactNode }) {
           onClose={() => setIsSidebarOpen(false)}
         />
 
-        <main className="flex-1 pt-14 lg:pt-0 min-h-screen" id="main-content">
+        <main className="flex-1 pt-14 lg:pt-0 pb-[calc(76px+env(safe-area-inset-bottom)+16px)] lg:pb-0 min-h-screen" id="main-content">
           <div 
             key={pageKey}
             className="animate-slide-fade w-full"

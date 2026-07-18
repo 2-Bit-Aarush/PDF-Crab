@@ -1,6 +1,6 @@
 import React from 'react'
 
-export function renderMarkdown(text: string): React.ReactNode[] {
+export function renderMarkdown(text: string, options?: { stripImages?: boolean }): React.ReactNode[] {
   if (!text) return []
 
   const lines = text.split('\n')
@@ -23,36 +23,38 @@ export function renderMarkdown(text: string): React.ReactNode[] {
       }
 
       if (match[1]) {
-        // Image
-        const alt = match[2]
-        const url = match[3] ? match[3].trim() : ''
+        if (!options?.stripImages) {
+          // Image
+          const alt = match[2]
+          const url = match[3] ? match[3].trim() : ''
 
-        const isValid = url.startsWith('http://') ||
-                        url.startsWith('https://') ||
-                        url.startsWith('blob:') ||
-                        url.startsWith('data:image/') ||
-                        url.startsWith('/')
+          const isValid = url.startsWith('http://') ||
+                          url.startsWith('https://') ||
+                          url.startsWith('blob:') ||
+                          url.startsWith('data:image/') ||
+                          url.startsWith('/')
 
-        if (!isValid) {
-          console.warn(`renderMarkdown: Failed to resolve image asset: "${url}". Source is relative or unresolvable.`);
-          parts.push(
-            <div key={key++} className="my-3 p-4 rounded border border-red-200 bg-red-50 text-red-700 text-xs font-mono text-center max-w-md mx-auto">
-              <div>❌ Failed to load image snippet: &quot;{url}&quot;</div>
-              <div className="text-[10px] text-red-500 mt-1">Image path must be absolute, a valid URL, local path, or base64 data.</div>
-            </div>
-          )
-        } else {
-          parts.push(
-            <img
-              key={key++}
-              src={url}
-              alt={alt}
-              onError={(e) => {
-                console.error(`renderMarkdown image load error for URL: "${url}"`, e);
-              }}
-              className="my-3 max-w-full max-h-[300px] object-contain rounded border border-border bg-card shadow-sm mx-auto block"
-            />
-          )
+          if (!isValid) {
+            console.warn(`renderMarkdown: Failed to resolve image asset: "${url}". Source is relative or unresolvable.`);
+            parts.push(
+              <div key={key++} className="my-3 p-4 rounded border border-red-200 bg-red-50 text-red-700 text-xs font-mono text-center max-w-md mx-auto">
+                <div>❌ Failed to load image snippet: &quot;{url}&quot;</div>
+                <div className="text-[10px] text-red-500 mt-1">Image path must be absolute, a valid URL, local path, or base64 data.</div>
+              </div>
+            )
+          } else {
+            parts.push(
+              <img
+                key={key++}
+                src={url}
+                alt={alt}
+                onError={(e) => {
+                  console.error(`renderMarkdown image load error for URL: "${url}"`, e);
+                }}
+                className="my-3 max-w-full max-h-[300px] object-contain rounded border border-border bg-card shadow-sm mx-auto block"
+              />
+            )
+          }
         }
       } else if (match[4]) {
         // Bold
@@ -149,6 +151,9 @@ export function renderMarkdown(text: string): React.ReactNode[] {
     // Block images (when the whole line is an image)
     else if (line.startsWith('![') && line.endsWith(')')) {
       flushList()
+      if (options?.stripImages) {
+        continue
+      }
       const match = /!\[(.*?)\]\((.*?)\)/.exec(line)
       if (match) {
         elements.push(
@@ -170,6 +175,9 @@ export function renderMarkdown(text: string): React.ReactNode[] {
     // Paragraph
     else {
       flushList()
+      if (options?.stripImages && line.includes('**Visual Snippet**:')) {
+        continue
+      }
       elements.push(
         <p key={`p-${i}`} className="my-1.5 leading-relaxed text-foreground/85 text-sm">
           {renderInline(line)}

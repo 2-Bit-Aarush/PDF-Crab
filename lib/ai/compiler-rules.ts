@@ -19,14 +19,12 @@ If multiple documents explain the same topic from different perspectives, merge 
 The final explanation should contain the union of all unique knowledge.
 Never replace one explanation with another if they complement each other.
 
-## Rule 4 — Preserve Mathematical Accuracy
-Never rewrite, simplify, or remove:
-- formulas
-- equations
-- derivations
-- calculations
-- proofs
-Mathematical content should be preserved exactly unless correcting obvious OCR mistakes.
+## Rule 4 — Clean Text Explanations & Separated Symbolic Equations
+- Do NOT include standalone, isolated equations, chemical formulas, reaction mechanisms, or formula blocks as part of the generated markdown text fields (like explanation, definitions, or bullet points).
+- Instead, the generated text should explain the underlying concepts, variables, and technical terms naturally in prose (e.g., referencing 'as shown in the ionization energy equation').
+- Any standalone mathematical expressions, chemical equations, graphs, tables, or complex formula blocks MUST only exist as visual evidence blocks inside the Source Evidence gallery, NOT as raw text or duplicated equations inside the main written content.
+- Keep the written explanation clean and readable, avoiding raw mathematical line-by-line OCR copy-pasting.
+
 
 ## Rule 5 — Preserve Examples
 Worked examples are educational content.

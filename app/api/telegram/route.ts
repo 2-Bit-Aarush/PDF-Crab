@@ -121,7 +121,7 @@ export async function POST(request: Request) {
           .insert({
             master_note_id: noteId,
             status: 'queued',
-            phase: 'Indexing Sources',
+            phase: 'Preparing OCR',
           })
           .select()
           .single()
@@ -384,7 +384,7 @@ export async function POST(request: Request) {
               .insert({
                 master_note_id: note.id,
                 status: 'queued',
-                phase: 'Indexing Sources',
+                phase: 'Preparing OCR',
               })
               .select()
               .single()

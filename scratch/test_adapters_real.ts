@@ -15,7 +15,18 @@ async function main() {
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
   
   const adminSupabase = createAdminClient();
-  const noteId = 'a7be1ad6-23ab-453e-a9fd-0e693082ba6c';
+  const { data: firstNote, error: findError } = await adminSupabase
+    .from('master_notes')
+    .select('id')
+    .eq('generated', true)
+    .limit(1)
+    .maybeSingle();
+
+  if (findError || !firstNote) {
+    console.error('No generated master notes found in DB:', findError);
+    return;
+  }
+  const noteId = firstNote.id;
   
   const { data: note, error } = await adminSupabase
     .from('master_notes')

@@ -42,7 +42,18 @@ export type MasterNote = {
   generated: boolean
   sources: SourcePdf[]
   timeline: TimelineEntry[]
-  sections: { id: string; heading: string; body: string }[]
+  sections: { id: string; heading: string; body: string; ocrSource?: string }[]
+  compilationReport?: {
+    id: string
+    createdAt: string
+    aiProvider: string
+    aiModel: string
+    ocrProvider: string
+    duration: number
+    duplicatesRemoved: number
+    pagesProcessed: number
+    warnings: string[]
+  } | null
 }
 
 export type Vault = {
@@ -103,11 +114,26 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
             ai_model,
             ocr_provider,
             source_document_hashes,
+            compilation_reports (
+              id,
+              created_at,
+              ai_provider,
+              ai_model,
+              ocr_provider,
+              compile_duration,
+              input_tokens,
+              output_tokens,
+              duplicates_removed,
+              pages_processed,
+              warnings,
+              errors
+            ),
             note_sections (
               id,
               heading,
               body,
-              display_order
+              display_order,
+              ocr_source
             )
           )
         `)
@@ -137,6 +163,7 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
               id: s.id,
               heading: s.heading,
               body: s.body,
+              ocrSource: s.ocr_source,
             }))
 
           const timeline = (n.note_sections || [])
@@ -147,6 +174,9 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
               date: `Chapter ${idx + 1}`,
             }))
 
+          const reports = n.compilation_reports || []
+          const latestReport = reports.length > 0 ? reports[0] : null
+
           return {
             id: n.id,
             vaultId: n.vault_id,
@@ -156,6 +186,17 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
             sources,
             sections,
             timeline,
+            compilationReport: latestReport ? {
+              id: latestReport.id,
+              createdAt: latestReport.created_at,
+              aiProvider: latestReport.ai_provider,
+              aiModel: latestReport.ai_model,
+              ocrProvider: latestReport.ocr_provider,
+              duration: latestReport.compile_duration,
+              duplicatesRemoved: latestReport.duplicates_removed,
+              pagesProcessed: latestReport.pages_processed,
+              warnings: latestReport.warnings || [],
+            } : null,
           }
         })
 

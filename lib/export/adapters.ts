@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit'
 import { AssetResolver } from './resolver'
+import { parseNotebookSection, CompiledSectionBlock } from './parser'
 
 export interface NotebookViewModel {
   title: string
@@ -257,9 +258,182 @@ export class PDFAdapter implements OutputAdapter<Buffer> {
 
     doc.on('data', (chunk) => chunks.push(chunk))
 
-    // 1. Cover Page
+    // Layout Debugger State
+    const pagesReport: any[] = []
+    let pageCreationReason = 'Implicit (Automatic Overflow)'
+    let activeComponent = 'None'
+    let totalPagesCreated = 1
+    let explicitPageBreaksCount = 0
+    let implicitOverflowsCount = 0
+    let largestComponentHeight = 0
+    let largestComponentName = 'None'
+    let totalRemainingSpaceSum = 0
+    let decisionCheckCount = 0
+
+    const originalAddPage = doc.addPage.bind(doc)
+    doc.addPage = function(options?: any) {
+      const stack = new Error().stack || ''
+      const pageIndex = doc.bufferedPageRange().count
+      const currentCursorY = doc.y
+      
+      console.log(`\n====================================================`)
+      console.log(`NEW PAGE CREATED`)
+      console.log(`Page Index: ${pageIndex + 1}`)
+      console.log(`Cursor Y before break: ${Math.round(currentCursorY)}`)
+      console.log(`Reason: ${pageCreationReason}`)
+      console.log(`Active Component: ${activeComponent}`)
+      console.log(`Call Stack:\n${stack.split('\n').slice(2, 6).join('\n')}`)
+      console.log(`====================================================`)
+
+      if (pageCreationReason.startsWith('Component') || pageCreationReason.startsWith('Explicit')) {
+        explicitPageBreaksCount++
+      } else {
+        implicitOverflowsCount++
+      }
+
+      pagesReport.push({
+        pageNum: pageIndex + 1,
+        reason: pageCreationReason,
+        activeComponent,
+        cursorYBefore: currentCursorY,
+      })
+
+      totalPagesCreated++
+      pageCreationReason = 'Implicit (Automatic Overflow)'
+      activeComponent = 'None'
+
+      return originalAddPage(options)
+    }
+
+    const pagesWithContent = new Set<number>()
+    const markCurrentPageActive = () => {
+      const pagesArr = (doc as any)._pageBuffer
+      if (pagesArr) {
+        const pageIdx = pagesArr.indexOf(doc.page)
+        if (pageIdx !== -1) {
+          pagesWithContent.add(pageIdx)
+        }
+      }
+    }
+
+    // Height estimators
     const width = doc.page.width
     const height = doc.page.height
+    const contentWidth = width - doc.page.margins.left - doc.page.margins.right
+
+    const estHeadingHeight = (heading: string) => {
+      doc.font(fonts.bold).fontSize(20)
+      return doc.heightOfString(heading, { width: contentWidth }) + 10
+    }
+
+    const estCalloutHeight = (title: string, text: string) => {
+      doc.font(fonts.bold).fontSize(10)
+      const titleHeight = doc.heightOfString(title, { width: contentWidth - 24 })
+      doc.font(fonts.italic).fontSize(9.5)
+      const textHeight = doc.heightOfString(text, { width: contentWidth - 24 })
+      return titleHeight + textHeight + 12 * 2.2 + 10
+    }
+
+    const estPointsCardHeight = (title: string, points: any[]) => {
+      doc.font(fonts.bold).fontSize(10)
+      let contentHeight = doc.heightOfString(title, { width: contentWidth - 24 }) + 6
+      doc.font(fonts.regular).fontSize(9.5)
+      for (const pt of points) {
+        const text = typeof pt === 'object' ? pt.text : pt
+        const src = typeof pt === 'object' && pt.source ? ` (Source: ${pt.source})` : ''
+        contentHeight += doc.heightOfString(`•  ${text}${src}`, { width: contentWidth - 24 }) + 3
+      }
+      return contentHeight + 12 * 2 + 10
+    }
+
+    const estExplanationHeight = (text: string) => {
+      doc.font(fonts.bold).fontSize(11)
+      const labelHeight = doc.heightOfString('Key Explanation') + 4
+      doc.font(fonts.regular).fontSize(10)
+      const textHeight = doc.heightOfString(text, { width: contentWidth, align: 'justify', lineGap: 3 })
+      return labelHeight + textHeight + 12
+    }
+
+    const estTrendsHeight = (text: string) => {
+      doc.font(fonts.bold).fontSize(11)
+      const labelHeight = doc.heightOfString('Trends & Reference Tables') + 4
+      doc.font(fonts.regular).fontSize(10)
+      const textHeight = doc.heightOfString(text, { width: contentWidth, align: 'justify', lineGap: 3 })
+      return labelHeight + textHeight + 12
+    }
+
+    const estExampleBoxHeight = (index: number, text: string, source: string) => {
+      doc.font(fonts.bold).fontSize(10)
+      const titleHeight = doc.heightOfString(`Worked Example ${index}`, { width: contentWidth - 24 })
+      doc.font(fonts.regular).fontSize(9.5)
+      const textHeight = doc.heightOfString(text, { width: contentWidth - 24 })
+      const srcHeight = source ? doc.heightOfString(`Source: ${source}`, { width: contentWidth - 24 }) + 2 : 0
+      return titleHeight + textHeight + srcHeight + 12 * 2.2 + 10
+    }
+
+    const estNotesHeight = (text: string) => {
+      doc.font(fonts.bold).fontSize(11)
+      const labelHeight = doc.heightOfString('Notes & Exceptions') + 4
+      doc.font(fonts.regular).fontSize(10)
+      const textHeight = doc.heightOfString(text, { width: contentWidth, align: 'justify', lineGap: 3 })
+      return labelHeight + textHeight + 12
+    }
+
+    const estSourceEvidenceHeight = (visList: any[]) => {
+      doc.font(fonts.bold).fontSize(11)
+      let total = doc.heightOfString('Original Source Evidence') + 6
+      for (const vis of visList) {
+        total += 150 + 15
+        doc.font(fonts.bold).fontSize(9)
+        total += doc.heightOfString(vis.caption, { align: 'center' }) + 4
+        if (vis.source) {
+          doc.font(fonts.italic).fontSize(8)
+          total += doc.heightOfString(`Source: ${vis.source}`, { align: 'center' }) + 4
+        }
+        total += 12
+      }
+      return total
+    }
+
+    const estMetadataCardHeight = () => {
+      return 55 + 10
+    }
+
+    const checkPageBreak = (componentName: string, estimatedHeight: number) => {
+      const pageHeight = doc.page.height
+      const bottomMargin = doc.page.margins.bottom
+      const remainingHeight = pageHeight - bottomMargin - doc.y
+      
+      const fits = remainingHeight >= estimatedHeight
+      const decision = fits ? 'Render in place' : 'Create New Page'
+      
+      console.log(`\n----------------------------------------------------`)
+      console.log(`Rendering: ${componentName}`)
+      console.log(`Page: ${doc.bufferedPageRange().count}`)
+      console.log(`Current Cursor: ${Math.round(doc.y)}`)
+      console.log(`Remaining Height: ${Math.round(remainingHeight)}`)
+      console.log(`Estimated Height: ${Math.round(estimatedHeight)}`)
+      console.log(`Fits: ${fits ? 'YES' : 'NO'}`)
+      console.log(`Decision: ${decision}`)
+      console.log(`----------------------------------------------------`)
+
+      if (estimatedHeight > largestComponentHeight) {
+        largestComponentHeight = estimatedHeight
+        largestComponentName = componentName
+      }
+      
+      totalRemainingSpaceSum += remainingHeight
+      decisionCheckCount++
+
+      if (!fits) {
+        pageCreationReason = `Component '${componentName}' requested page break (no fit: ${Math.round(estimatedHeight)}pt estimated, ${Math.round(remainingHeight)}pt left)`
+        activeComponent = componentName
+        doc.addPage()
+      }
+    }
+
+    // 1. Cover Page (Page 0)
+    markCurrentPageActive()
     
     doc.save()
     doc.rect(0, 0, width, 180).fill('#1e3a8a')
@@ -287,164 +461,149 @@ export class PDFAdapter implements OutputAdapter<Buffer> {
     doc.font(fonts.bold).fillColor('#4b5563').text('Source Material:', 100, cardY + 45)
     doc.font(fonts.regular).fillColor('#1f2937').text('Processed scanned classroom lecture notes & structures', 180, cardY + 45)
     
+    // Add Table of Contents page (Page 1) but leave it empty initially
+    pageCreationReason = 'Explicit Table of Contents page break'
+    doc.addPage()
+    markCurrentPageActive()
+
+    // Add sections page (Page 2)
+    pageCreationReason = 'Explicit Sections page break'
     doc.addPage()
 
-    // 2. Table of Contents
-    doc.font(fonts.bold).fontSize(18).fillColor('#1e3a8a').text('Table of Contents')
-    doc.moveDown(1.5)
-    
-    for (let i = 0; i < model.sections.length; i++) {
-      const section = model.sections[i]
-      doc.font(fonts.bold).fontSize(11).fillColor('#1f2937').text(`${i + 1}.  ${section.heading}`, { continued: true })
-      doc.font(fonts.regular).fillColor('#9ca3af').text(' ............................................................................................ ', { continued: true })
-      doc.font(fonts.bold).fillColor('#2563eb').text(`Page ${i + 3}`)
-      doc.moveDown(0.8)
-    }
-
-    doc.addPage()
+    let totalSourceEvidenceImagesExpected = 0
+    let totalSourceEvidenceImagesRendered = 0
+    let hasBrokenImages = false
+    const sectionStartPages: number[] = []
 
     // 3. Render Topics
     for (let idx = 0; idx < model.sections.length; idx++) {
       const section = model.sections[idx]
+      const blocks = parseNotebookSection(section)
       
       if (idx > 0) {
-        doc.addPage()
+        // Evaluate page break before sections
+        const estHeadingH = estHeadingHeight(blocks.heading)
+        checkPageBreak(`Heading: ${blocks.heading}`, estHeadingH)
       }
 
-      // Draw Section Header
-      doc.font(fonts.bold).fontSize(20).fillColor('#1e3a8a').text(section.heading)
+      const currentPagesArr = (doc as any)._pages
+      if (currentPagesArr) {
+        sectionStartPages[idx] = currentPagesArr.indexOf(doc.page)
+      }
+
+      // Draw Section Header (Topic Title)
+      markCurrentPageActive()
+      doc.font(fonts.bold).fontSize(20).fillColor('#1e3a8a').text(blocks.heading)
       doc.moveDown(0.5)
-      
-      // Parse markdown body
-      const lines = section.body.split('\n')
-      let currentBlockType: 'none' | 'definition' | 'explanation' | 'visuals' | 'examples' | 'points' = 'none'
-      
-      let definition = ''
-      let explanation = ''
-      const visuals: { caption: string; url: string; source: string }[] = []
-      const examples: { text: string; source: string }[] = []
-      const points: { text: string; source: string }[] = []
-      
-      for (let lIdx = 0; lIdx < lines.length; lIdx++) {
-        const line = lines[lIdx].trim()
-        if (!line) continue
-        
-        if (line.startsWith('**Definition**:')) {
-          currentBlockType = 'definition'
-          continue
-        } else if (line.startsWith('**Key Explanation**:')) {
-          currentBlockType = 'explanation'
-          continue
-        } else if (line.startsWith('**Visual Snippet**:')) {
-          currentBlockType = 'visuals'
-          continue
-        } else if (line.startsWith('**Example**:')) {
-          currentBlockType = 'examples'
-          continue
-        } else if (line.startsWith('**Important Points**:')) {
-          currentBlockType = 'points'
-          continue
-        }
-        
-        if (currentBlockType === 'definition') {
-          if (line.startsWith('>')) {
-            definition += (definition ? '\n' : '') + line.substring(1).trim()
-          } else {
-            definition += (definition ? '\n' : '') + line
-          }
-        } else if (currentBlockType === 'explanation') {
-          explanation += (explanation ? '\n' : '') + line
-        } else if (currentBlockType === 'visuals') {
-          if (line.startsWith('![')) {
-            const match = line.match(/!\[(.*?)\]\((.*?)\)/)
-            if (match) {
-              const caption = match[1]
-              const url = match[2]
-              let source = ''
-              if (lIdx + 1 < lines.length && lines[lIdx + 1].trim().startsWith('*Source:')) {
-                source = lines[lIdx + 1].replace(/\*Source:|\*/g, '').trim()
-                lIdx++
-              }
-              visuals.push({ caption, url, source })
-            }
-          }
-        } else if (currentBlockType === 'examples') {
-          if (line.startsWith('>')) {
-            const text = line.substring(1).trim()
-            let source = ''
-            if (lIdx + 1 < lines.length && lines[lIdx + 1].trim().startsWith('*Source:')) {
-              source = lines[lIdx + 1].replace(/\*Source:|\*/g, '').trim()
-              lIdx++
-            }
-            examples.push({ text, source })
-          }
-        } else if (currentBlockType === 'points') {
-          if (line.startsWith('-')) {
-            const textRaw = line.substring(1).trim()
-            const srcMatch = textRaw.match(/(.*)\((Source:.*?)\)/)
-            if (srcMatch) {
-              points.push({ text: srcMatch[1].trim(), source: srcMatch[2].replace('Source:', '').trim() })
-            } else {
-              points.push({ text: textRaw, source: '' })
-            }
-          }
-        }
+
+      // 1. Definition
+      if (blocks.definition && !blocks.definition.includes('(No verbatim definition')) {
+        const estH = estCalloutHeight('Verbatim Definition', blocks.definition)
+        checkPageBreak('Verbatim Definition', estH)
+        markCurrentPageActive()
+        drawCalloutBox(doc, 'Verbatim Definition', blocks.definition, fonts)
       }
 
-      // Render Definition
-      if (definition && !definition.includes('(No verbatim definition')) {
-        drawCalloutBox(doc, 'Verbatim Definition', definition, fonts)
+      // 2. Key Points
+      if (blocks.keyPoints && blocks.keyPoints.length > 0) {
+        const estH = estPointsCardHeight('Key Points & Insights', blocks.keyPoints)
+        checkPageBreak('Key Points & Insights', estH)
+        markCurrentPageActive()
+        drawPointsCard(doc, 'Key Points & Insights', blocks.keyPoints, fonts)
       }
 
-      // Render Explanation
-      if (explanation) {
+      // 3. Detailed Explanation (Key Explanation)
+      if (blocks.explanation) {
+        const estH = estExplanationHeight(blocks.explanation)
+        checkPageBreak('Key Explanation', estH)
+        markCurrentPageActive()
         doc.font(fonts.bold).fontSize(11).fillColor('#1e3a8a').text('Key Explanation')
         doc.moveDown(0.3)
-        doc.font(fonts.regular).fontSize(10).fillColor('#1f2937').text(explanation, { align: 'justify', lineGap: 3 })
+        doc.font(fonts.regular).fontSize(10).fillColor('#1f2937').text(blocks.explanation, { align: 'justify', lineGap: 3 })
         doc.moveDown(1)
       }
 
-      // Render Visual Snippets
-      for (const vis of visuals) {
-        try {
-          const resolved = await AssetResolver.resolve(vis.url)
-          if (resolved) {
-            const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
-            const imgWidth = 350
-            const imgHeight = 150
-            const startX = doc.page.margins.left + (contentWidth - imgWidth) / 2
-            
-            doc.save()
-            doc.rect(startX - 10, doc.y - 10, imgWidth + 20, imgHeight + 20).stroke('#e5e7eb')
-            doc.restore()
-            
-            doc.image(resolved.buffer, startX, doc.y, { fit: [imgWidth, imgHeight], align: 'center' })
-            doc.y += imgHeight + 15
-            
-            doc.font(fonts.bold).fontSize(9).fillColor('#4b5563').text(vis.caption, { align: 'center' })
-            if (vis.source) {
-              doc.font(fonts.italic).fontSize(8).fillColor('#9ca3af').text(`Source: ${vis.source}`, { align: 'center' })
-            }
-            doc.moveDown(1)
-          }
-        } catch (err) {
-          console.warn(`PDFAdapter: Failed to render image crop ${vis.url}:`, err)
+      // 4. Important Trends / Tables
+      if (blocks.trendsAndTables) {
+        const estH = estTrendsHeight(blocks.trendsAndTables)
+        checkPageBreak('Trends & Reference Tables', estH)
+        markCurrentPageActive()
+        doc.font(fonts.bold).fontSize(11).fillColor('#1e3a8a').text('Trends & Reference Tables')
+        doc.moveDown(0.3)
+        doc.font(fonts.regular).fontSize(10).fillColor('#1f2937').text(blocks.trendsAndTables, { align: 'justify', lineGap: 3 })
+        doc.moveDown(1)
+      }
+
+      // 5. Examples
+      if (blocks.examples && blocks.examples.length > 0) {
+        let exCounter = 1
+        for (const ex of blocks.examples) {
+          const estH = estExampleBoxHeight(exCounter, ex.text, ex.source)
+          checkPageBreak(`Worked Example ${exCounter}`, estH)
+          markCurrentPageActive()
+          drawExampleBox(doc, exCounter++, ex.text, ex.source, fonts)
         }
       }
 
-      // Render Examples
-      let exCounter = 1
-      for (const ex of examples) {
-        drawExampleBox(doc, exCounter++, ex.text, ex.source, fonts)
+      // 6. Notes / Exceptions
+      if (blocks.notesAndExceptions) {
+        const estH = estNotesHeight(blocks.notesAndExceptions)
+        checkPageBreak('Notes & Exceptions', estH)
+        markCurrentPageActive()
+        doc.font(fonts.bold).fontSize(11).fillColor('#b91c1c').text('Notes & Exceptions')
+        doc.moveDown(0.3)
+        doc.font(fonts.regular).fontSize(10).fillColor('#7f1d1d').text(blocks.notesAndExceptions, { align: 'justify', lineGap: 3 })
+        doc.moveDown(1)
       }
 
-      // Render Important Points Card
-      if (points.length > 0) {
-        drawPointsCard(doc, 'Key Points & Insights', points, fonts)
+      // 7. Original Source Evidence (grouped together at the end)
+      if (blocks.sourceEvidence && blocks.sourceEvidence.length > 0) {
+        const estH = estSourceEvidenceHeight(blocks.sourceEvidence)
+        checkPageBreak('Original Source Evidence', estH)
+        markCurrentPageActive()
+        doc.font(fonts.bold).fontSize(11).fillColor('#4b5563').text('Original Source Evidence')
+        doc.moveDown(0.5)
+
+        totalSourceEvidenceImagesExpected += blocks.sourceEvidence.length
+
+        for (const vis of blocks.sourceEvidence) {
+          try {
+            const resolved = await AssetResolver.resolve(vis.url)
+            if (resolved) {
+              markCurrentPageActive()
+              const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
+              const imgWidth = 350
+              const imgHeight = 150
+              const startX = doc.page.margins.left + (contentWidth - imgWidth) / 2
+              
+              doc.save()
+              doc.rect(startX - 10, doc.y - 10, imgWidth + 20, imgHeight + 20).stroke('#e5e7eb')
+              doc.restore()
+              
+              doc.image(resolved.buffer, startX, doc.y, { fit: [imgWidth, imgHeight], align: 'center' })
+              doc.y += imgHeight + 15
+              
+              doc.font(fonts.bold).fontSize(9).fillColor('#4b5563').text(vis.caption, { align: 'center' })
+              if (vis.source) {
+                doc.font(fonts.italic).fontSize(8).fillColor('#9ca3af').text(`Source: ${vis.source}`, { align: 'center' })
+              }
+              doc.moveDown(1)
+              totalSourceEvidenceImagesRendered++
+            } else {
+              hasBrokenImages = true
+            }
+          } catch (err) {
+            hasBrokenImages = true
+            console.warn(`PDFAdapter: Failed to render image crop ${vis.url}:`, err)
+          }
+        }
       }
 
       // Metadata card at bottom
       if (section.metadata) {
+        const estH = estMetadataCardHeight()
+        checkPageBreak('Study Intelligence Metadata', estH)
+        markCurrentPageActive()
         const si = section.metadata.studyIntelligence
         if (si) {
           const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right
@@ -460,32 +619,90 @@ export class PDFAdapter implements OutputAdapter<Buffer> {
       }
     }
 
-    // Global Header & Footer Drawing
-    const range = doc.bufferedPageRange()
-    for (let i = 0; i < range.count; i++) {
-      doc.switchToPage(i)
-      
-      // Skip cover page
-      if (i === 0) continue
-      
-      const pWidth = doc.page.width
-      const pHeight = doc.page.height
-      const margin = 50
-      
-      // Header
-      doc.save()
-      doc.font(fonts.italic).fontSize(8).fillColor('#9ca3af')
-      doc.text('Digital Study Notebook', margin, 30)
-      doc.text(model.title, margin, 30, { align: 'right', width: pWidth - margin * 2 })
-      doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(margin, 42).lineTo(pWidth - margin, 42).stroke()
-      
-      // Footer
-      doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(margin, pHeight - 42).lineTo(pWidth - margin, pHeight - 42).stroke()
-      doc.font(fonts.regular).fontSize(8).fillColor('#9ca3af')
-      doc.text(`Page ${i + 1} of ${range.count}`, margin, pHeight - 35, { align: 'right', width: pWidth - margin * 2 })
-      doc.text('PDF-Crab compiler', margin, pHeight - 35)
-      doc.restore()
+    // 2. Render Table of Contents on Page 1 using final correct page numbers
+    doc.switchToPage(1)
+    doc.y = doc.page.margins.top
+    doc.font(fonts.bold).fontSize(18).fillColor('#1e3a8a').text('Table of Contents')
+    doc.moveDown(1.5)
+    
+    for (let i = 0; i < model.sections.length; i++) {
+      const section = model.sections[i]
+      const startPage = sectionStartPages[i]
+      const displayPageNum = startPage + 1
+
+      doc.font(fonts.bold).fontSize(11).fillColor('#1f2937').text(`${i + 1}.  ${section.heading}`, { continued: true })
+      doc.font(fonts.regular).fillColor('#9ca3af').text(' ............................................................................................ ', { continued: true })
+      doc.font(fonts.bold).fillColor('#2563eb').text(`Page ${displayPageNum}`)
+      doc.moveDown(0.8)
     }
+
+    // Content Completeness & Image Reference Integrity Validation Pass
+    if (hasBrokenImages || totalSourceEvidenceImagesRendered < totalSourceEvidenceImagesExpected) {
+      throw new Error(`PDF Export Validation Failed: Missing or broken source evidence images. Expected ${totalSourceEvidenceImagesExpected} images but rendered ${totalSourceEvidenceImagesRendered}.`)
+    }
+
+    // Global Header & Footer Drawing safely
+    if (typeof doc.bufferedPageRange === 'function') {
+      const range = doc.bufferedPageRange()
+      
+      // Monkey patch addPage to do absolutely nothing during header/footer drawing!
+      // This prevents any line wrap/height calculation on headers and footers from triggering recursive empty pages.
+      const addPageAfterLoop = doc.addPage
+      doc.addPage = function() {
+        console.log(`[Layout] Bypassed implicit page overflow during header/footer rendering!`)
+        return doc
+      }
+      
+      activeComponent = 'Header / Footer Processing'
+      pageCreationReason = 'Header / Footer Overflow'
+
+      for (let i = 0; i < range.count; i++) {
+        doc.switchToPage(i)
+        
+        // Skip cover page
+        if (i === 0) continue
+        
+        const pWidth = doc.page.width
+        const pHeight = doc.page.height
+        const margin = 50
+        
+        // Header
+        doc.save()
+        doc.font(fonts.italic).fontSize(8).fillColor('#9ca3af')
+        doc.text('Digital Study Notebook', margin, 30)
+        doc.text(model.title, margin, 30, { align: 'right', width: pWidth - margin * 2 })
+        doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(margin, 42).lineTo(pWidth - margin, 42).stroke()
+        
+        // Footer
+        doc.strokeColor('#e5e7eb').lineWidth(0.5).moveTo(margin, pHeight - 42).lineTo(pWidth - margin, pHeight - 42).stroke()
+        doc.font(fonts.regular).fontSize(8).fillColor('#9ca3af')
+        doc.text(`Page ${i + 1} of ${range.count}`, margin, pHeight - 35, { align: 'right', width: pWidth - margin * 2 })
+        doc.text('PDF-Crab compiler', margin, pHeight - 35)
+        doc.restore()
+      }
+      
+      // Restore addPage
+      doc.addPage = addPageAfterLoop
+    }
+
+    // Calculate layout metrics and print final report
+    const finalPageCount = doc.bufferedPageRange().count
+    const blankPagesCount = Array.from({ length: finalPageCount }).filter((_, idx) => {
+      if (idx === 0 || idx === 1) return false
+      return !pagesWithContent.has(idx)
+    }).length
+
+    const avgRemainingSpace = decisionCheckCount > 0 ? Math.round(totalRemainingSpaceSum / decisionCheckCount) : 0
+
+    console.log(`\n----------------------------------------`)
+    console.log(`FINAL PDF LAYOUT REPORT`)
+    console.log(`Pages Created: ${finalPageCount}`)
+    console.log(`Explicit Page Breaks: ${explicitPageBreaksCount}`)
+    console.log(`Automatic Overflows: ${implicitOverflowsCount}`)
+    console.log(`Blank Pages: ${blankPagesCount}`)
+    console.log(`Largest Component: ${largestComponentName} (${Math.round(largestComponentHeight)}pt)`)
+    console.log(`Average Remaining Space: ${avgRemainingSpace}pt`)
+    console.log(`----------------------------------------\n`)
 
     doc.end()
 

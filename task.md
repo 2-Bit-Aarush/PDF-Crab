@@ -85,3 +85,29 @@
   - [x] Generate exports with embedded visual asset crops and complete styling
   - [x] Implement Markdown, DOCX, and PDF adapters
   - [x] Prepare interfaces for Flashcards, Quiz, Mind Map, and Anki adapters
+
+## Final Polish & Product Refinements (Real-World Feedback)
+- [x] **Task 1: Context-Aware Visual Snippets & Adaptive Padding**
+  - [x] Implement context-aware adjacent block bounding box merging in OCR endpoint
+  - [x] Implement adaptive margins/padding based on block classifications (equations, tables, graphs, diagrams)
+  - [x] Force classification as visual type for all scientific notations, graphs, and tables
+- [x] **Task 2: Source Evidence Card & Mobile Gallery**
+  - [x] Update `vault-store.tsx` to retrieve and select the `ocr_source` JSON metadata column
+  - [x] Add options parameter to `renderMarkdown` and implement `stripImages` to filter out image links in notebook view
+  - [x] Implement the `SourceEvidenceCard` component in `generated-notes` view using pre-mapped visual asset lists
+  - [x] Implement the fullscreen interactive gallery overlay with arrow swiping, zoom, and document name/page citations
+  - [x] Programmatically sort visual snippets by educational importance (Definition -> Formula -> Diagram -> Table -> Worked Example -> Graph -> Other)
+- [x] **Task 3: Minimizable Branded Loading Animation**
+  - [x] Program phase-specific carried items (Document, magnifying glass, notebook, connection nodes, gold notebook)
+  - [x] Implement real-time page stacking and binding visuals inside the destination folder
+  - [x] Add subtle breathing, blinking, and wave personality frames to the walking crab
+  - [x] Provide "Hide Animation" button and bottom floating progress indicators with "Restore" triggers
+- [x] **Task 4: Compilation Summary Header Card**
+  - [x] Program compile worker to log merged duplicate statistics and warnings in the database report
+  - [x] Render a top-level summary header card in the notes page listing source files, timestamps, and compiled metrics
+- [x] **Task 5: Topic Confidence Indicator**
+  - [x] Create and display objective confidence level pills (High, Medium, Review) below headings based on document coverage and conflict markers
+- [x] **Task 6: Progress Alignment & Pipeline Verification**
+  - [x] Rename compile phases in compiler, compile API, page code, and Telegram webhook routes
+  - [x] Display an intermediate 400ms "Upload Complete" state and a 2.0-second delay on compilation success for complete animation and metrics review
+
