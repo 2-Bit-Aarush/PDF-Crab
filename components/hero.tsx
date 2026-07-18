@@ -1,1 +1,0 @@
-export { Hero, Features, Workflow } from './features'

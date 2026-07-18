@@ -238,20 +238,14 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
       loading,
       fetchVaults,
       async createVault(name) {
-        console.log('[createVault] Creating vault stage: Init with name:', name)
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('Unauthenticated')
-
-        console.log("User:", user?.id);
 
         const payload = {
           name,
           owner_id: user.id
         };
 
-        console.log("Payload:", payload);
-
-        console.log('[createVault] Sending insert request to Supabase...')
         const { data, error } = await supabase
           .from('vaults')
           .insert(payload)
@@ -259,13 +253,10 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
           .single()
 
         if (error) {
-          console.error("Full Error Object:", error);
           console.error('[createVault] Insert failed:', error)
           throw formatSupabaseError(error)
         }
 
-        console.log('[createVault] Insert succeeded. Vault ID:', data?.id || 'null')
-        console.log('[createVault] Triggering fetchVaults for local store sync...')
         await fetchVaults()
         return data?.id || 'temp-id'
       },
@@ -290,22 +281,17 @@ export function VaultStoreProvider({ children }: { children: React.ReactNode }) 
         return undefined
       },
       async createMasterNote(vaultId, title) {
-        console.log('[createMasterNote] Creating master note stages: Init with title:', title)
         const { data, error } = await supabase
           .from('master_notes')
           .insert({ vault_id: vaultId, title })
           .select()
           .single()
 
-        console.log('[createMasterNote] Supabase response received. Data:', data, 'Error:', error)
-
         if (error) {
           console.error('[createMasterNote] Insert failed:', error)
           throw formatSupabaseError(error)
         }
 
-        console.log('[createMasterNote] Insert succeeded. Note ID:', data.id)
-        console.log('[createMasterNote] Triggering fetchVaults for local store sync...')
         await fetchVaults()
         return data.id
       },

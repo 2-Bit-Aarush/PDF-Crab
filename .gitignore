@@ -31,3 +31,7 @@ next-env.d.ts
 Credentials/
 credentials/
 .telemetry.json
+
+# Temporary assets and scratch directories
+/scratch/
+/public/temp-crops/

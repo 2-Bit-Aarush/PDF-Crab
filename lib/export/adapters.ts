@@ -258,52 +258,7 @@ export class PDFAdapter implements OutputAdapter<Buffer> {
 
     doc.on('data', (chunk) => chunks.push(chunk))
 
-    // Layout Debugger State
-    const pagesReport: any[] = []
-    let pageCreationReason = 'Implicit (Automatic Overflow)'
-    let activeComponent = 'None'
-    let totalPagesCreated = 1
-    let explicitPageBreaksCount = 0
-    let implicitOverflowsCount = 0
-    let largestComponentHeight = 0
-    let largestComponentName = 'None'
-    let totalRemainingSpaceSum = 0
-    let decisionCheckCount = 0
 
-    const originalAddPage = doc.addPage.bind(doc)
-    doc.addPage = function(options?: any) {
-      const stack = new Error().stack || ''
-      const pageIndex = doc.bufferedPageRange().count
-      const currentCursorY = doc.y
-      
-      console.log(`\n====================================================`)
-      console.log(`NEW PAGE CREATED`)
-      console.log(`Page Index: ${pageIndex + 1}`)
-      console.log(`Cursor Y before break: ${Math.round(currentCursorY)}`)
-      console.log(`Reason: ${pageCreationReason}`)
-      console.log(`Active Component: ${activeComponent}`)
-      console.log(`Call Stack:\n${stack.split('\n').slice(2, 6).join('\n')}`)
-      console.log(`====================================================`)
-
-      if (pageCreationReason.startsWith('Component') || pageCreationReason.startsWith('Explicit')) {
-        explicitPageBreaksCount++
-      } else {
-        implicitOverflowsCount++
-      }
-
-      pagesReport.push({
-        pageNum: pageIndex + 1,
-        reason: pageCreationReason,
-        activeComponent,
-        cursorYBefore: currentCursorY,
-      })
-
-      totalPagesCreated++
-      pageCreationReason = 'Implicit (Automatic Overflow)'
-      activeComponent = 'None'
-
-      return originalAddPage(options)
-    }
 
     const pagesWithContent = new Set<number>()
     const markCurrentPageActive = () => {
@@ -399,35 +354,12 @@ export class PDFAdapter implements OutputAdapter<Buffer> {
       return 55 + 10
     }
 
-    const checkPageBreak = (componentName: string, estimatedHeight: number) => {
+    const checkPageBreak = (_componentName: string, estimatedHeight: number) => {
       const pageHeight = doc.page.height
       const bottomMargin = doc.page.margins.bottom
       const remainingHeight = pageHeight - bottomMargin - doc.y
       
-      const fits = remainingHeight >= estimatedHeight
-      const decision = fits ? 'Render in place' : 'Create New Page'
-      
-      console.log(`\n----------------------------------------------------`)
-      console.log(`Rendering: ${componentName}`)
-      console.log(`Page: ${doc.bufferedPageRange().count}`)
-      console.log(`Current Cursor: ${Math.round(doc.y)}`)
-      console.log(`Remaining Height: ${Math.round(remainingHeight)}`)
-      console.log(`Estimated Height: ${Math.round(estimatedHeight)}`)
-      console.log(`Fits: ${fits ? 'YES' : 'NO'}`)
-      console.log(`Decision: ${decision}`)
-      console.log(`----------------------------------------------------`)
-
-      if (estimatedHeight > largestComponentHeight) {
-        largestComponentHeight = estimatedHeight
-        largestComponentName = componentName
-      }
-      
-      totalRemainingSpaceSum += remainingHeight
-      decisionCheckCount++
-
-      if (!fits) {
-        pageCreationReason = `Component '${componentName}' requested page break (no fit: ${Math.round(estimatedHeight)}pt estimated, ${Math.round(remainingHeight)}pt left)`
-        activeComponent = componentName
+      if (remainingHeight < estimatedHeight) {
         doc.addPage()
       }
     }
@@ -462,12 +394,10 @@ export class PDFAdapter implements OutputAdapter<Buffer> {
     doc.font(fonts.regular).fillColor('#1f2937').text('Processed scanned classroom lecture notes & structures', 180, cardY + 45)
     
     // Add Table of Contents page (Page 1) but leave it empty initially
-    pageCreationReason = 'Explicit Table of Contents page break'
     doc.addPage()
     markCurrentPageActive()
 
     // Add sections page (Page 2)
-    pageCreationReason = 'Explicit Sections page break'
     doc.addPage()
 
     let totalSourceEvidenceImagesExpected = 0
@@ -649,12 +579,8 @@ export class PDFAdapter implements OutputAdapter<Buffer> {
       // This prevents any line wrap/height calculation on headers and footers from triggering recursive empty pages.
       const addPageAfterLoop = doc.addPage
       doc.addPage = function() {
-        console.log(`[Layout] Bypassed implicit page overflow during header/footer rendering!`)
         return doc
       }
-      
-      activeComponent = 'Header / Footer Processing'
-      pageCreationReason = 'Header / Footer Overflow'
 
       for (let i = 0; i < range.count; i++) {
         doc.switchToPage(i)
@@ -684,25 +610,6 @@ export class PDFAdapter implements OutputAdapter<Buffer> {
       // Restore addPage
       doc.addPage = addPageAfterLoop
     }
-
-    // Calculate layout metrics and print final report
-    const finalPageCount = doc.bufferedPageRange().count
-    const blankPagesCount = Array.from({ length: finalPageCount }).filter((_, idx) => {
-      if (idx === 0 || idx === 1) return false
-      return !pagesWithContent.has(idx)
-    }).length
-
-    const avgRemainingSpace = decisionCheckCount > 0 ? Math.round(totalRemainingSpaceSum / decisionCheckCount) : 0
-
-    console.log(`\n----------------------------------------`)
-    console.log(`FINAL PDF LAYOUT REPORT`)
-    console.log(`Pages Created: ${finalPageCount}`)
-    console.log(`Explicit Page Breaks: ${explicitPageBreaksCount}`)
-    console.log(`Automatic Overflows: ${implicitOverflowsCount}`)
-    console.log(`Blank Pages: ${blankPagesCount}`)
-    console.log(`Largest Component: ${largestComponentName} (${Math.round(largestComponentHeight)}pt)`)
-    console.log(`Average Remaining Space: ${avgRemainingSpace}pt`)
-    console.log(`----------------------------------------\n`)
 
     doc.end()
 
