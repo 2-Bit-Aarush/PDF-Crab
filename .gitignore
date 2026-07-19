@@ -1,14 +1,23 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules/
+hardhat/node_modules/
 
 # next.js
-/.next/
-/out/
+.next/
+out/
 
 # production
 /build
+dist/
+
+# hardhat
+hardhat/cache/
+hardhat/artifacts/
+hardhat/coverage/
+hardhat/typechain-types/
+hardhat/*.tsbuildinfo
 
 # debug
 npm-debug.log*
@@ -16,8 +25,12 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files
-.env*
+# env files - NEVER commit secrets
+.env
+.env.local
+.env.development.local
+.env.production.local
+.env*.local
 
 # vercel
 .vercel
@@ -26,12 +39,28 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Secrets
+# Secrets - NEVER commit
 .env.local
 Credentials/
 credentials/
 .telemetry.json
 
+# wallet/private key files
+*.pem
+*.key
+keystore/
+*.json
+
 # Temporary assets and scratch directories
 /scratch/
 /public/temp-crops/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

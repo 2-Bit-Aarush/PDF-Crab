@@ -1,0 +1,25 @@
+# Hardhat generated files
+cache/
+artifacts/
+coverage/
+typechain-types/
+types/
+*.tsbuildinfo
+
+# Dependencies
+node_modules/
+
+# Environment files - NEVER commit
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
