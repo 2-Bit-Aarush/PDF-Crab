@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { NotebookViewModel, MarkdownAdapter, DocxAdapter, PDFAdapter } from '@/lib/export/adapters'
+import { MarkdownAdapter } from '@/lib/export/markdown'
+import { DocxAdapter } from '@/lib/export/docx'
 
 export async function GET(request: Request) {
   try {
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
     const filename = noteTitle.replace(/\s+/g, '-').toLowerCase()
 
     // Map database structures to the canonical NotebookViewModel
-    const model: NotebookViewModel = {
+    const model: { title: string; sections: { heading: string; body: string; metadata?: any }[] } = {
       title: noteTitle,
       sections: sections.map((s: any) => {
         let metadata: any = undefined
@@ -82,6 +83,8 @@ export async function GET(request: Request) {
     }
 
     if (format === 'pdf') {
+      // Dynamic import - only loads pdfkit when PDF format is requested
+      const { PDFAdapter } = await import('@/lib/export/pdf')
       const adapter = new PDFAdapter()
       const pdfBuffer = await adapter.transform(model)
       return new Response(pdfBuffer, {
