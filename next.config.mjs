@@ -7,6 +7,7 @@ const nextConfig = {
     unoptimized: true,
   },
   serverExternalPackages: ['pdfkit'],
+  output: 'standalone',
 }
 
 export default nextConfig
