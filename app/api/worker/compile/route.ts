@@ -4,8 +4,6 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { GroqAIProvider } from '@/lib/ai/groq'
 import { recordTelemetry } from '@/lib/dev-logger'
 import { buildCompilerSystemPrompt } from '@/lib/ai/compiler-rules'
-import * as fs from 'fs'
-import * as path from 'path'
 import { AssetResolver } from '@/lib/export/resolver'
 
 function resolveImageAssetUrl(imgUrl: string, docs: any[]): string {
