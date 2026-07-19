@@ -116,6 +116,8 @@ export class DocxAdapter implements OutputAdapter<string> {
 }
 
 // Font resolver for Unicode support
+import * as fs from 'fs';
+
 function getFonts() {
   const fonts = {
     regular: 'Helvetica',
@@ -130,7 +132,6 @@ function getFonts() {
     italic: 'C:\\Windows\\Fonts\\ariali.ttf'
   }
   
-  const fs = require('fs');
   if (fs.existsSync(winFonts.regular)) {
     fonts.regular = winFonts.regular;
   }
