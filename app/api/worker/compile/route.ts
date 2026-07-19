@@ -78,44 +78,19 @@ async function resolveAndCacheAsset(imageUrl: string, adminSupabase: any): Promi
     }
   }
 
-  const safeFilename = storageKey.replace(/\//g, '_')
-  let publicDir = path.join(process.cwd(), 'public');
-  const absoluteCrabPath = 'C:\\Users\\DELL\\OneDrive\\Documents\\Projects\\PDF-Crab\\public';
-  if (fs.existsSync(absoluteCrabPath)) {
-    publicDir = absoluteCrabPath;
-  }
-  const localDir = path.join(publicDir, 'temp-crops')
-  if (!fs.existsSync(localDir)) {
-    fs.mkdirSync(localDir, { recursive: true })
-  }
-  const localFilePath = path.join(localDir, safeFilename)
-  const webPath = `/temp-crops/${safeFilename}`
-
   let buffer: Buffer | null = null
 
-  // Ensure file exists locally or download it
-  if (fs.existsSync(localFilePath)) {
-    try {
-      buffer = fs.readFileSync(localFilePath)
-    } catch (e) {
-      console.error('Failed to read cached file:', e)
+  try {
+    console.log(`resolveAndCacheAsset: Downloading storageKey: ${storageKey}`);
+    const { data, error } = await adminSupabase.storage.from('assets').download(storageKey)
+    if (!error && data) {
+      buffer = Buffer.from(await data.arrayBuffer())
+      console.log(`resolveAndCacheAsset: Successfully loaded ${storageKey} in memory (${buffer.length} bytes)`);
+    } else if (error) {
+      console.error(`Failed to download storageKey: ${storageKey} - ${error.message}`)
     }
-  }
-
-  if (!buffer) {
-    try {
-      console.log(`resolveAndCacheAsset: Downloading storageKey: ${storageKey}`);
-      const { data, error } = await adminSupabase.storage.from('assets').download(storageKey)
-      if (!error && data) {
-        buffer = Buffer.from(await data.arrayBuffer())
-        fs.writeFileSync(localFilePath, buffer)
-        console.log(`resolveAndCacheAsset: Successfully saved ${safeFilename} (${buffer.length} bytes)`);
-      } else if (error) {
-        console.error(`Failed to download storageKey: ${storageKey} - ${error.message}`)
-      }
-    } catch (e) {
-      console.error(`Error downloading asset from storage:`, e)
-    }
+  } catch (e) {
+    console.error(`Error downloading asset from storage:`, e)
   }
 
   // Parse dimensions and mimeType
@@ -150,7 +125,7 @@ async function resolveAndCacheAsset(imageUrl: string, adminSupabase: any): Promi
     storageKey,
     publicUrl: trimmed,
     signedUrl,
-    localPath: webPath,
+    localPath: signedUrl, // Process entirely in-memory and use signed URL
     width,
     height,
     mimeType

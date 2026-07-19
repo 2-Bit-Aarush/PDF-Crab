@@ -30,6 +30,20 @@ export class AssetResolver {
         if (fs.existsSync(localPath)) {
           buffer = fs.readFileSync(localPath);
         }
+
+        // If local file cache is missing (e.g. on Vercel), fall back to downloading from Supabase storage URL directly in memory
+        if (!buffer) {
+          const filename = reference.replace(/^\/temp-crops\//, '');
+          const match = filename.match(/^users_([^_]+)_vaults_([^_]+)_assets_(.+)$/);
+          if (match) {
+            const userId = match[1];
+            const vaultId = match[2];
+            const rest = match[3];
+            const storageKey = `users/${userId}/vaults/${vaultId}/assets/${rest}`;
+            const supabaseUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://default.supabase.co'}/storage/v1/object/public/assets/${storageKey}`;
+            reference = supabaseUrl;
+          }
+        }
       }
       // 2. If it's a local file path
       else if (typeof reference === 'string' && (fs.existsSync(reference) || path.isAbsolute(reference))) {
