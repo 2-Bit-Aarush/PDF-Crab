@@ -23,6 +23,13 @@ import {
   GitBranch,
   Layers,
   Eye,
+  Shield,
+  ExternalLink,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+  Wallet,
+  Hash,
 } from 'lucide-react'
 import {
   PixelDocIcon,
@@ -39,6 +46,17 @@ import { renderMarkdown } from '@/lib/markdown'
 import { CrabLoadingAnimation } from '@/components/crab-loading-animation'
 import { SourceEvidenceCard } from '@/components/source-evidence-card'
 import { parseNotebookSection } from '@/lib/export/parser'
+import {
+  publishProof,
+  computeNotebookHash,
+  connectWallet,
+  formatAddress,
+  formatTimestamp,
+  getExplorerUrl,
+  isContractConfigured,
+  type NotebookContent,
+  type NotebookProof,
+} from '@/lib/blockchain'
 
 
 const TABS = [
@@ -228,6 +246,69 @@ function TopicConfidenceIndicator({ ocrSource }: { ocrSource: any }) {
       <span className="text-[10px] text-muted-foreground font-medium">
         {confidence.explanation}
       </span>
+</div>
+  )
+}
+
+// Verified on Monad card component
+function VerifiedProofCard({ proof, onViewExplorer }: { proof: NotebookProof; onViewExplorer: () => void }) {
+  return (
+    <div className="border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/10 rounded-lg p-5 animate-in fade-in slide-in-from-bottom-2">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 size-12 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+          <Shield className="size-6 text-green-600 dark:text-green-400" />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800">
+              <CheckCircle className="size-3.5" />
+              Verified on Monad
+            </span>
+          </div>
+
+          <h3 className="font-semibold text-foreground mb-1">{proof.notebookTitle}</h3>
+          <p className="text-xs text-muted-foreground font-mono mb-3">
+            Hash: {proof.notebookHash.slice(0, 16)}...{proof.notebookHash.slice(-8)}
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
+            <div className="flex items-center gap-1.5">
+              <Wallet className="size-3.5 text-muted-foreground" />
+              <span className="font-mono text-foreground">{formatAddress(proof.owner)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Clock className="size-3.5 text-muted-foreground" />
+              <span>{formatTimestamp(proof.timestamp)}</span>
+            </div>
+            <div className="flex items-center gap-1.5 col-span-2">
+              <Hash className="size-3.5 text-muted-foreground" />
+              <span className="font-mono text-foreground truncate">{proof.transactionHash.slice(0, 12)}...{proof.transactionHash.slice(-8)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-1.5"
+              onClick={onViewExplorer}
+            >
+              <ExternalLink className="size-3.5" />
+              View on Explorer
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="flex-1 gap-1.5"
+              onClick={() => navigator.clipboard.writeText(getExplorerUrl(proof.transactionHash))}
+            >
+              <ExternalLink className="size-3.5" />
+              Copy Link
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -253,6 +334,11 @@ export default function MasterNotePage() {
 
   const [replacingDocId, setReplacingDocId] = useState<string | null>(null)
   const replaceInputRef = useRef<HTMLInputElement>(null)
+
+  // Blockchain publish proof state
+  const [publishState, setPublishState] = useState<'idle' | 'connecting' | 'computing' | 'publishing' | 'success' | 'error'>('idle')
+  const [publishError, setPublishError] = useState<string | null>(null)
+  const [publishedProof, setPublishedProof] = useState<NotebookProof | null>(null)
 
   const handleTriggerReplace = (docId: string) => {
     setReplacingDocId(docId)
@@ -417,6 +503,71 @@ export default function MasterNotePage() {
       setCompileError(err.message || 'Could not compile')
       setCompilingPhase(-1)
       setUploadState('idle')
+    }
+  }
+
+  // Build notebook content for hashing
+  function buildNotebookContent(): NotebookContent {
+    if (!note) throw new Error('No note available')
+    return {
+      title: note.title,
+      sections: note.sections.map((s) => ({
+        heading: s.heading,
+        body: s.body,
+        metadata: s.ocrSource ? (typeof s.ocrSource === 'string' ? JSON.parse(s.ocrSource) : s.ocrSource) : undefined,
+      })),
+      sources: note.sources,
+      coverage: note.coverage,
+      generatedAt: new Date().toISOString(),
+    }
+  }
+
+  async function handlePublishProof() {
+    if (!result) return
+
+    setPublishState('connecting')
+    setPublishError(null)
+
+    try {
+      // Step 1: Connect wallet
+      const walletResult = await connectWallet()
+      const address = walletResult?.address
+      if (!address) {
+        throw new Error('Failed to connect wallet')
+      }
+
+      // Step 2: Compute hash
+      setPublishState('computing')
+      const content = buildNotebookContent()
+      const notebookHash = await computeNotebookHash(content)
+
+      // Step 3: Publish proof
+      setPublishState('publishing')
+      const publishResult = await publishProof({
+        notebookHash,
+        notebookTitle: note.title,
+        transactionHash: `0x${Date.now().toString(16).padStart(64, '0')}`, // placeholder, will be replaced by actual tx hash
+      })
+
+      if (publishResult.success && publishResult.transactionHash) {
+        // Step 4: Verify and get proof details
+        const proof: NotebookProof = {
+          notebookHash,
+          owner: address, // Use the connected wallet address
+          notebookTitle: note.title,
+          timestamp: Math.floor(Date.now() / 1000),
+          transactionHash: publishResult.transactionHash,
+          exists: true,
+        }
+        setPublishedProof(proof)
+        setPublishState('success')
+      } else {
+        setPublishError(publishResult.error || 'Publication failed')
+        setPublishState('error')
+      }
+    } catch (err: any) {
+      setPublishError(err.message || 'Failed to publish proof')
+      setPublishState('error')
     }
   }
 
@@ -1084,6 +1235,76 @@ export default function MasterNotePage() {
                   <div className="text-xs text-muted-foreground">Editable Microsoft Word format</div>
                 </div>
               </Button>
+            </div>
+
+            {/* Publish Proof on Monad */}
+            <div className="border-t border-border/50 pt-4">
+              <div className="mb-4">
+                <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Publish Proof on Monad
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                  Create an on-chain cryptographic proof of this notebook. Only a SHA-256 hash is stored — your content stays private.
+                </p>
+              </div>
+
+              {publishedProof ? (
+                <VerifiedProofCard
+                  proof={publishedProof}
+                  onViewExplorer={() => window.open(getExplorerUrl(publishedProof.transactionHash), '_blank')}
+                />
+              ) : (
+                <Button
+                  size="lg"
+                  variant="default"
+                  onClick={handlePublishProof}
+                  disabled={publishState !== 'idle' || !isContractConfigured() || note.sections.length === 0}
+                  className="w-full justify-center gap-3"
+                >
+                  {publishState === 'connecting' && (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Connecting Wallet...
+                    </>
+                  )}
+                  {publishState === 'computing' && (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Computing Hash...
+                    </>
+                  )}
+                  {publishState === 'publishing' && (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      Publishing to Monad...
+                    </>
+                  )}
+                  {publishState === 'error' && (
+                    <>
+                      <AlertCircle className="size-4" />
+                      Error - Try Again
+                    </>
+                  )}
+                  {publishState === 'idle' && (
+                    <>
+                      <Hash className="size-3.5" />
+                      Publish Proof
+                    </>
+                  )}
+                </Button>
+              )}
+
+              {publishError && publishState === 'error' && (
+                <div className="mt-3 p-3 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 rounded border border-red-200 dark:border-red-900/30">
+                  {publishError}
+                </div>
+              )}
+
+              {!isContractConfigured() && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Smart contract not configured. Set NEXT_PUBLIC_NOTEBOOK_PROOF_CONTRACT_ADDRESS to enable.
+                </p>
+              )}
             </div>
           </Reveal>
         )}

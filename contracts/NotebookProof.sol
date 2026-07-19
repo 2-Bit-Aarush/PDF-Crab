@@ -24,7 +24,7 @@ contract NotebookProof {
     );
 
     /// @notice Notebook proof data structure
-    struct NotebookProof {
+    struct ProofData {
         bytes32 notebookHash;
         address owner;
         string notebookTitle;
@@ -34,7 +34,7 @@ contract NotebookProof {
     }
 
     /// @notice Mapping from notebook hash to proof data
-    mapping(bytes32 => NotebookProof) public proofs;
+    mapping(bytes32 => ProofData) public proofs;
 
     /// @notice Mapping from owner address to array of notebook hashes they own
     mapping(address => bytes32[]) public ownerNotebooks;
@@ -59,7 +59,7 @@ contract NotebookProof {
         uint256 timestamp = block.timestamp;
         uint256 blockNumber = block.number;
 
-        NotebookProof storage proof = proofs[notebookHash];
+        ProofData storage proof = proofs[notebookHash];
 
         if (proof.exists) {
             // Update existing proof (only owner can update)
@@ -72,15 +72,13 @@ contract NotebookProof {
 
             emit NotebookProofUpdated(notebookHash, owner, notebookTitle, timestamp, transactionHash);
         } else {
-            // Create new proof
-            proof = NotebookProof({
-                notebookHash: notebookHash,
-                owner: owner,
-                notebookTitle: notebookTitle,
-                timestamp: timestamp,
-                transactionHash: transactionHash,
-                exists: true
-            });
+            // Create new proof - assign each field individually
+            proof.notebookHash = notebookHash;
+            proof.owner = owner;
+            proof.notebookTitle = notebookTitle;
+            proof.timestamp = timestamp;
+            proof.transactionHash = transactionHash;
+            proof.exists = true;
 
             ownerNotebooks[owner].push(notebookHash);
             publishedAtBlock[notebookHash] = blockNumber;
@@ -93,9 +91,15 @@ contract NotebookProof {
     /// @param notebookHash SHA-256 hash of the notebook content to verify
     /// @return exists Whether the proof exists
     /// @return proof The proof data if it exists
-    function verifyProof(bytes32 notebookHash) external view returns (bool exists, NotebookProof memory proof) {
-        NotebookProof storage proof = proofs[notebookHash];
-        return (proof.exists, proof);
+    function verifyProof(bytes32 notebookHash) external view returns (bool exists, ProofData memory proof) {
+        ProofData storage storageProof = proofs[notebookHash];
+        exists = storageProof.exists;
+        proof.notebookHash = storageProof.notebookHash;
+        proof.owner = storageProof.owner;
+        proof.notebookTitle = storageProof.notebookTitle;
+        proof.timestamp = storageProof.timestamp;
+        proof.transactionHash = storageProof.transactionHash;
+        proof.exists = storageProof.exists;
     }
 
     /// @notice Get all notebook hashes owned by an address
