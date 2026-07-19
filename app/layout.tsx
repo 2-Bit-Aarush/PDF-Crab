@@ -4,6 +4,7 @@ import { Geist, Geist_Mono, IBM_Plex_Mono, Pixelify_Sans, Playfair_Display } fro
 import { VaultStoreProvider } from '@/lib/vault-store'
 import { MascotProvider } from '@/components/mascot/mascot-provider'
 import { AppBackground } from '@/components/app-background'
+import { PWARegister } from '@/components/pwa-register'
 import './globals.css'
 
 const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
@@ -27,6 +28,11 @@ export const metadata: Metadata = {
   title: 'PDF-Crab — Knowledge workspace for master notes',
   description:
     'Upload PDFs and handwritten notes. Compile them into one master note — original wording preserved, duplicates removed.',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'PDF-Crab',
+  },
   icons: {
     icon: [
       {
@@ -42,7 +48,7 @@ export const metadata: Metadata = {
         type: 'image/svg+xml',
       },
     ],
-    apple: '/apple-icon.png',
+    apple: '/icon-512.png',
   },
   openGraph: {
     title: 'PDF-Crab — Knowledge Compiler',
@@ -53,7 +59,7 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: '#08090c',
+  themeColor: '#ff8c3c',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -95,6 +101,7 @@ export default function RootLayout({
             {children}
           </MascotProvider>
         </VaultStoreProvider>
+        <PWARegister />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
